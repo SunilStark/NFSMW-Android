@@ -50,7 +50,10 @@ final class ShaderBuilder {
     // older version is built again: "sin-punteros-1" (v0.3.7) dropped the 64-bit pointer path, so the shaders
     // run on Vulkan 1.1 and on drivers without shaderInt64.
     static final String LIBRARY_VERSION = "sin-punteros-1";
-    private static final String VERSION_FILE = LIBRARY + ".version";
+    // The OpenGL ES backend's library (nfsmw_nativo_api = gles): the same shaders with one texture per sampler
+    // register instead of descriptor heaps, built from the containers of the Vulkan one (assets/shaders/build.js).
+    static final String LIBRARY_GLES = "nfsmw_shaders_gles.nfsp";
+    static final String LIBRARY_GLES_VERSION = "gles-1";
     private static final String TAG = "NFSMW";
     private static final String HOST = "appassets.androidplatform.net";
 
@@ -65,26 +68,41 @@ final class ShaderBuilder {
     private final Activity activity;
     private final File gameRoot;
     private final Listener listener;
+    private final boolean gles;
     private final Handler main = new Handler(Looper.getMainLooper());
     private WebView web;
     private boolean finished;
 
-    ShaderBuilder(Activity activity, File gameRoot, Listener listener) {
+    /** gles: build LIBRARY_GLES, which needs a current LIBRARY. */
+    ShaderBuilder(Activity activity, File gameRoot, boolean gles, Listener listener) {
         this.activity = activity;
         this.gameRoot = gameRoot;
+        this.gles = gles;
         this.listener = listener;
+    }
+
+    private static String name(boolean gles) {
+        return gles ? LIBRARY_GLES : LIBRARY;
+    }
+
+    private static String version(boolean gles) {
+        return gles ? LIBRARY_GLES_VERSION : LIBRARY_VERSION;
     }
 
     /** Whether the game folder already has a library of the current version. */
     static boolean hasLibrary(File gameRoot) {
-        File f = new File(gameRoot, LIBRARY);
+        return hasLibrary(gameRoot, false);
+    }
+
+    static boolean hasLibrary(File gameRoot, boolean gles) {
+        File f = new File(gameRoot, name(gles));
         if (!f.isFile() || f.length() <= 24) {
             return false;
         }
-        try (InputStream in = new FileInputStream(new File(gameRoot, VERSION_FILE))) {
+        try (InputStream in = new FileInputStream(new File(gameRoot, name(gles) + ".version"))) {
             byte[] buffer = new byte[64];
             int n = in.read(buffer);
-            return n > 0 && LIBRARY_VERSION.equals(new String(buffer, 0, n, "UTF-8").trim());
+            return n > 0 && version(gles).equals(new String(buffer, 0, n, "UTF-8").trim());
         } catch (IOException e) {
             return false;
         }
@@ -166,7 +184,7 @@ final class ShaderBuilder {
         }
     }
 
-    /** Only default.xex and the files of NFS/, never anything outside the game folder. */
+    /** Only default.xex, the Vulkan library and the files of NFS/, never anything outside the game folder. */
     private File gameFile(String relative) throws IOException {
         File file = new File(gameRoot, relative).getCanonicalFile();
         File root = gameRoot.getCanonicalFile();
@@ -174,7 +192,7 @@ final class ShaderBuilder {
             return null;
         }
         String rel = root.toPath().relativize(file.toPath()).toString().replace('\\', '/');
-        boolean allowed = rel.equalsIgnoreCase("default.xex") ||
+        boolean allowed = rel.equalsIgnoreCase("default.xex") || rel.equals(LIBRARY) ||
                 (rel.toLowerCase(Locale.ROOT).startsWith("nfs/") && rel.indexOf('/', 4) < 0);
         return allowed ? file : null;
     }
@@ -222,6 +240,11 @@ final class ShaderBuilder {
         }
 
         @JavascriptInterface
+        public boolean gles() {
+            return gles;
+        }
+
+        @JavascriptInterface
         public void progress(float fraction, String text) {
             main.post(() -> {
                 if (!finished) {
@@ -232,8 +255,9 @@ final class ShaderBuilder {
 
         @JavascriptInterface
         public void done(String base64, String sha256, String edition) {
-            File target = new File(gameRoot, LIBRARY);
-            File temp = new File(gameRoot, LIBRARY + ".tmp");
+            String library = name(gles);
+            File target = new File(gameRoot, library);
+            File temp = new File(gameRoot, library + ".tmp");
             try {
                 byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
                 try (FileOutputStream out = new FileOutputStream(temp)) {
@@ -241,13 +265,13 @@ final class ShaderBuilder {
                     out.getFD().sync();
                 }
                 if (!temp.renameTo(target)) {
-                    throw new IOException("no se pudo guardar " + LIBRARY);
+                    throw new IOException("no se pudo guardar " + library);
                 }
-                try (FileOutputStream out = new FileOutputStream(new File(gameRoot, VERSION_FILE))) {
-                    out.write(LIBRARY_VERSION.getBytes("UTF-8"));
+                try (FileOutputStream out = new FileOutputStream(new File(gameRoot, library + ".version"))) {
+                    out.write(version(gles).getBytes("UTF-8"));
                     out.getFD().sync();
                 }
-                Log.i(TAG, "[shaders] " + LIBRARY + " " + bytes.length + " bytes, SHA-256 " + sha256 +
+                Log.i(TAG, "[shaders] " + library + " " + bytes.length + " bytes, SHA-256 " + sha256 +
                         (edition.isEmpty() ? "" : " (" + edition + ")"));
                 main.post(() -> finish(target, null));
             } catch (IOException | IllegalArgumentException e) {

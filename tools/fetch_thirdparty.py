@@ -7,6 +7,7 @@ into a temporary folder and copies every file that sdk/thirdparty does not have 
 Usage: python tools/fetch_thirdparty.py
 Needs git.
 """
+import argparse
 import os
 import shutil
 import stat
@@ -29,15 +30,22 @@ def remove_readonly(func, path, _):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--cache-dir', help='Keep a pinned checkout for reproducible subsequent builds')
+    args = parser.parse_args()
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     target = os.path.join(root, 'sdk', 'thirdparty')
-    work = tempfile.mkdtemp(prefix='rexglue-sdk-')
+    work = os.path.abspath(args.cache_dir) if args.cache_dir else tempfile.mkdtemp(prefix='rexglue-sdk-')
+    os.makedirs(work, exist_ok=True)
     try:
-        run('git', 'init', '-q', work)
-        run('git', 'remote', 'add', 'origin', UPSTREAM, cwd=work)
+        if not os.path.isdir(os.path.join(work, '.git')):
+            run('git', 'init', '-q', work)
+            run('git', 'remote', 'add', 'origin', UPSTREAM, cwd=work)
+        elif subprocess.check_output(['git', 'remote', 'get-url', 'origin'], cwd=work, text=True).strip() != UPSTREAM:
+            raise ValueError('Dependency cache origin does not match the pinned upstream SDK')
         run('git', 'fetch', '-q', '--depth', '1', 'origin', COMMIT, cwd=work)
         run('git', 'checkout', '-q', 'FETCH_HEAD', cwd=work)
-        run('git', 'submodule', 'update', '--init', '--recursive', cwd=work)
+        run('git', 'submodule', 'update', '--init', '--recursive', '--depth', '1', '--jobs', '4', cwd=work)
         source = os.path.join(work, 'thirdparty')
         # On Windows without symlink privileges, Git checks symlinks out as
         # regular files containing the link target. Flatten those files to
@@ -88,6 +96,11 @@ def main():
                         link_target = link_file.read().strip()
                     resolved_target = os.path.normpath(os.path.join(dirpath, link_target))
                     if not os.path.isfile(resolved_target):
+                        # Directory links are not flattened as files. MoltenVK also has links into its
+                        # separately fetched Apple dependencies, unused by Android/Windows/Switch.
+                        if os.path.isdir(resolved_target) or relative_path.replace('\\', '/').startswith('moltenvk/'):
+                            print(f'Skipping directory or optional MoltenVK dependency link: {relative_path}')
+                            continue
                         raise FileNotFoundError(
                             f'Could not resolve vendored symlink {relative_path}: {link_target}'
                         )
@@ -106,10 +119,15 @@ def main():
                     copied += 1
         print(f'{copied} files copied into sdk/thirdparty, {kept} files of this port kept')
     finally:
-        if sys.version_info >= (3, 12):
-            shutil.rmtree(work, onexc=remove_readonly)
-        else:
-            shutil.rmtree(work, onerror=remove_readonly)
+        if not args.cache_dir:
+            temp_root = os.path.realpath(tempfile.gettempdir())
+            resolved = os.path.realpath(work)
+            if os.path.dirname(resolved) != temp_root or not os.path.basename(resolved).startswith('rexglue-sdk-'):
+                raise ValueError('Refusing to delete an unexpected dependency workspace')
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(work, onexc=remove_readonly)
+            else:
+                shutil.rmtree(work, onerror=remove_readonly)
 
 
 if __name__ == '__main__':

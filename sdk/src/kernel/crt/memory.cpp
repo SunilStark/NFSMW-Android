@@ -7,9 +7,11 @@
  * @copyright   Copyright (c) 2026 Tom Clay <tomc@tctechstuff.com>
  * @license     BSD 3-Clause License
  */
+#include <cstdint>
 #include <cstring>
 
 #include <rex/hook.h>
+#include <rex/ppc/guest_memcpy.h>
 
 namespace rex::kernel::crt {
 
@@ -17,8 +19,13 @@ namespace rex::kernel::crt {
 // Standard memory operations
 // ---------------------------------------------------------------------------
 
+// memcpy with overlap (from kayo-b, victorgbd/NFSMW-Recompiled-Mobile 44481d1: the crash after the first in-race
+// cutscene). The Xbox 360 CRT memcpy copies forwards and NFSMW relies on it with overlapping ranges: it removes an
+// element from an array by copying the tail one slot back. std::memcpy leaves that undefined and bionic's arm64
+// one really duplicates elements. GuestMemcpy gives the game's result in every case
+// (tools/tests/guest_memcpy_test.cpp checks it against a model of the PPC code).
 static void* native_memcpy(void* dst, const void* src, size_t n) {
-  return std::memcpy(dst, src, n);
+  return rex::ppc::GuestMemcpy(dst, src, n);
 }
 
 static void* native_memmove(void* dst, const void* src, size_t n) {

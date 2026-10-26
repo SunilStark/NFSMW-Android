@@ -11,6 +11,7 @@ repository derived from it.
 | [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) by Tom Clay, with portions from [Xenia](https://xenia.jp) (Ben Vanik and the Xenia contributors) | `sdk/`: code generator, Xbox 360 kernel and runtime, GPU command processing | BSD-3-Clause (`sdk/LICENSE`) |
 | [XenosRecomp](https://github.com/hedge-dev/XenosRecomp) by hedge-dev and contributors | `shaders/XenosRecomp`: Xenos microcode to HLSL translator | MIT (`shaders/LICENSE.md`) |
 | [mesa-switch](https://github.com/danfromtico/mesa-switch) by danfromtico, on top of [Mesa](https://mesa3d.org) | The Vulkan driver (NVK) and shader compiler (NAK) for Horizon, linked into the NRO; `mesa/` holds the changes | MIT (Mesa's licenses per file) |
+| [NFSMW-Recompiled-Mobile](https://github.com/victorgbd/NFSMW-Recompiled-Mobile) by victorgbd and contributors (a fork of this repository) | Android 0.8.0: the OpenGL ES backend of the native renderer (`app/src/*_gles*`, `sdk/src/ui/gles/`), the LAN multiplayer (`xam_net.cpp`, `xsocket.cpp`, `ServidorEa.java` and friends, protocol of [nfsmw-server-lan](https://github.com/victorgbd/nfsmw-server-lan)), the CRT memcpy overlap fix by kayo-b and the 2+N core affinity idea by dvaustria741-a11y | GPL-3.0 |
 
 The Horizon (Switch) layer added to `sdk/` is under the SDK's BSD-3-Clause license, and the changes in `shaders/`
 and `mesa/` under the licenses of those projects (MIT), so they can be reused by other ports. The rest of this
@@ -27,6 +28,7 @@ Libraries used by the SDK, the NRO and the code generator, fetched from the subm
 | [libmspack](https://www.cabextract.org.uk/libmspack/) by Stuart Caie (LZX decompression) | LGPL-2.1 |
 | [glslang](https://github.com/KhronosGroup/glslang) | BSD-3-Clause and others (see its LICENSE.txt) |
 | [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools) | Apache-2.0 |
+| [SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross) at `2c32b6bf86f3`, its GLSL backend vendored in `sdk/thirdparty/spirv-cross` (SPIR-V to GLSL ES for the OpenGL ES backend) | Apache-2.0 |
 | [SPIRV-Headers](https://github.com/KhronosGroup/SPIRV-Headers), [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) | MIT, Apache-2.0 |
 | [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator) | MIT |
 | [fmt](https://github.com/fmtlib/fmt), [spdlog](https://github.com/gabime/spdlog) | MIT |

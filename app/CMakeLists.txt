@@ -19,6 +19,8 @@ set(NFSMW_SOURCES
     # The scene is drawn a single time: without the Xbox 360's 3-strip tiling or MSAA
     # (cvar nfsmw_render_sin_mosaico, on by default on Switch).
     src/nfsmw_render_targets.cpp
+    # Wider than 16:9 (cvar nfsmw_proporcion_pantalla): the camera sees more at the sides (Hor+).
+    src/nfsmw_panoramico.cpp
     # Race-time reductions: road reflection and faces of the car's cubemap
     # (cvars nfsmw_reflejo_carretera and nfsmw_cubemap_caras_max).
     src/nfsmw_recortes_carrera.cpp
@@ -39,6 +41,9 @@ set(NFSMW_SOURCES
     # Recursive filter of the sound engine (sub_825CD088) in native code, bit-identical
     # (cvar nfsmw_audio_filtro_nativo).
     src/nfsmw_audio_filtro.cpp
+    # Probe of EA's network connection (NetConnStatus) for LAN play; it only measures (cvar
+    # nfsmw_red_sonda). See docs/diario/red-y-privilegios.md.
+    src/nfsmw_red_sonda.cpp
     # Gain-scaled sum of the sound engine (sub_825FDFB0) in native code, bit-identical
     # (cvar nfsmw_audio_suma_nativa).
     src/nfsmw_audio_suma.cpp
@@ -104,6 +109,8 @@ set(NFSMW_SOURCES
     # in the NFSSPV library (nfsmw_shaders.nfsp next to the executable).
     src/nfsmw_nativo_shaders.cpp
     src/nfsmw_shader_library.cpp
+    # nfsmw_nativo_media_precision: RelaxedPrecision in the pixel shaders' SPIR-V.
+    src/nfsmw_spirv_precision.cpp
     # Native renderer, part C5b: VS and PS of each draw from the game
     # thread (shader constructors and the D3D Draw* functions).
     src/nfsmw_nativo_ganchos.cpp
@@ -130,6 +137,25 @@ if(ANDROID)
     # SDLActivity resolves SDL_main from libmain.so.
     add_library(nfsmw SHARED ${NFSMW_SOURCES})
     set_target_properties(nfsmw PROPERTIES OUTPUT_NAME main)
+    # The OpenGL ES backend (nfsmw_nativo_api = gles) calls GL and EGL from here too, not only the SDK.
+    target_link_libraries(nfsmw PRIVATE EGL GLESv3)
+    target_sources(nfsmw PRIVATE
+        src/nfsmw_nativo_destinos_gles.cpp
+        src/nfsmw_nativo_dibujos_gles.cpp
+        src/nfsmw_gles_shaders.cpp)
+    # SPIRV-Cross converts the GLES library's SPIR-V to GLSL ES on the phone. Only its GLSL backend is needed,
+    # vendored in sdk/thirdparty/spirv-cross (see README.nfsmw there).
+    set(NFSMW_SPIRV_CROSS "${REXSDK_DIR}/thirdparty/spirv-cross")
+    if(NOT EXISTS "${NFSMW_SPIRV_CROSS}/spirv_glsl.cpp")
+        message(FATAL_ERROR "SPIRV-Cross is missing from ${NFSMW_SPIRV_CROSS}")
+    endif()
+    target_sources(nfsmw PRIVATE
+        "${NFSMW_SPIRV_CROSS}/spirv_cross.cpp"
+        "${NFSMW_SPIRV_CROSS}/spirv_parser.cpp"
+        "${NFSMW_SPIRV_CROSS}/spirv_cross_parsed_ir.cpp"
+        "${NFSMW_SPIRV_CROSS}/spirv_cfg.cpp"
+        "${NFSMW_SPIRV_CROSS}/spirv_glsl.cpp")
+    target_include_directories(nfsmw PRIVATE "${NFSMW_SPIRV_CROSS}")
 elseif(WIN32)
     add_executable(nfsmw WIN32 ${NFSMW_SOURCES})
     # PC build: masks again the floating-point exceptions that
@@ -164,7 +190,13 @@ endif()
 #
 # Since src/nfsmw_app.h sets gpu_plugin=xenos by default, the --gpu_plugin
 # argument is no longer needed; it can still be passed to change it.
-rexglue_setup_target(nfsmw GPU_PLUGINS xenos)
+#
+# iOS has only the native renderer (nfsmw_renderizador = nativo): no plugin.
+if(IOS)
+    rexglue_setup_target(nfsmw)
+else()
+    rexglue_setup_target(nfsmw GPU_PLUGINS xenos)
+endif()
 
 # The SDK's FFmpeg (WMV3 decoder) for the cutscenes: nfsmw_video_wmv3.cpp.
 target_link_libraries(nfsmw PRIVATE libavcodec)

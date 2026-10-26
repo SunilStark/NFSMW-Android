@@ -76,6 +76,65 @@ async function scanFile(scanner, file, onBytes) {
   flush(true);
 }
 
+// The original containers stored in the Vulkan library (NFSSPV: per shader its container, then its SPIR-V). The
+// library is indexed by the container's hash, so the names given here do not matter.
+function containersOfLibrary(library) {
+  const view = new DataView(library.buffer, library.byteOffset, library.byteLength);
+  if (library.length < 24 || hex(library.subarray(0, 8)) !== '4e46535350560000' || view.getUint32(8, true) !== 1) {
+    throw new Error('nfsmw_shaders.nfsp no es válida');
+  }
+  const count = view.getUint32(12, true);
+  if (!count || count > 4096) {
+    throw new Error('nfsmw_shaders.nfsp no es válida');
+  }
+  const containers = [];
+  let offset = 24;
+  for (let i = 0; i < count; i++) {
+    if (offset + 16 > library.length) {
+      throw new Error('nfsmw_shaders.nfsp está cortada');
+    }
+    const original = view.getUint32(offset, true);
+    const words = view.getUint32(offset + 4, true);
+    offset += 16;
+    if (original < 24 || original > 65536 || words < 5 || words > 1024 * 1024 ||
+        offset + original + words * 4 > library.length) {
+      throw new Error('nfsmw_shaders.nfsp no es válida');
+    }
+    const bytes = library.slice(offset, offset + original);
+    containers.push({ name: `${bytes[3] & 1 ? 'v' : 'p'}_${String(i).padStart(6, '0')}.bin`, bytes });
+    offset += original + words * 4;
+  }
+  return containers;
+}
+
+// The OpenGL ES library (nfsmw_shaders_gles.nfsp), from the containers of the Vulkan one.
+async function mainGles(modules, shaderCommon, manifest) {
+  progress(0.02, 'Leyendo nfsmw_shaders.nfsp…');
+  const containers = containersOfLibrary(await fetchBytes(GAME + 'nfsmw_shaders.nfsp'));
+  const blurShas = new Set(manifest.builds.map((b) => b.blur_container_sha256));
+  let blurShader = null;
+  for (const c of containers) {
+    if (blurShas.has(await sha256(c.bytes))) {
+      blurShader = c.name.slice(0, -4);
+      break;
+    }
+  }
+  if (!blurShader) {
+    throw new Error('no se encontró el shader de composición en nfsmw_shaders.nfsp');
+  }
+  progress(0.1, `${containers.length} shaders. Traduciendo para OpenGL ES…`);
+  let compiled = 0;
+  const library = await buildShaderLibrary(containers, modules, shaderCommon, (text) => {
+    if (text.startsWith('Compilados')) {
+      compiled += 25;
+      progress(0.15 + 0.83 * (compiled / containers.length), text);
+    } else {
+      progress(0.12, text);
+    }
+  }, blurShader, true);
+  return library;
+}
+
 async function main() {
   setLanguage('es');
   progress(0, 'Cargando el compilador de shaders…');
@@ -85,6 +144,10 @@ async function main() {
   ]);
   const manifest = JSON.parse(new TextDecoder().decode(await fetchBytes('./release/manifest.json')));
   const shaderCommon = await fetchBytes('./shader_common.h');
+  if (host.gles()) {
+    await finish(await mainGles({ hlsl, dxc, pack }, shaderCommon, manifest), '');
+    return;
+  }
 
   progress(0.02, 'Leyendo default.xex…');
   const xex = await fetchBytes(GAME + 'default.xex');
@@ -144,12 +207,17 @@ async function main() {
   if (expected && libraryHash !== expected) {
     throw new Error(`la biblioteca no coincide con la esperada (${libraryHash.slice(0, 12)}…)`);
   }
+  await finish(library, build ? build.edition : '');
+}
+
+async function finish(library, edition) {
+  const libraryHash = await sha256(library);
   // Base64 in pieces, so no single string conversion of 3 MB of bytes has to fit in the call stack.
   let text = '';
   for (let i = 0; i < library.length; i += 0x8000) {
     text += String.fromCharCode.apply(null, library.subarray(i, i + 0x8000));
   }
-  host.done(btoa(text), libraryHash, build ? build.edition : '');
+  host.done(btoa(text), libraryHash, edition);
 }
 
 main().catch((error) => host.fail(String(error && error.message ? error.message : error)));

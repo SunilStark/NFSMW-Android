@@ -57,6 +57,17 @@
 #include <rex/ui/vulkan/provider.h>
 #include <rex/ui/windowed_app_context.h>
 
+#if REX_PLATFORM_ANDROID
+// The OpenGL ES backend (docs/motor-nativo-gles.md in NFSMW-Recompiled). Only on Android: it goes over EGL.
+#include <GLES3/gl32.h>
+#include <rex/ui/gles/presenter.h>
+#include <rex/ui/gles/provider.h>
+#include "nfsmw_nativo_destinos_gles.h"
+#define NFSMW_CON_GLES 1
+#else
+#define NFSMW_CON_GLES 0
+#endif
+
 #if defined(__aarch64__)
 #include <arm_neon.h>
 #endif
@@ -105,11 +116,25 @@ std::string Resumen();
 #include "../../sdk/src/core/threading_switch.h"
 #endif
 
+#if REX_PLATFORM_IOS
+// iOS has only the native renderer: the Xenos emulation plugin is not built there.
+REXCVAR_DEFINE_STRING(nfsmw_renderizador, "nativo", "NFSMW",
+                      "nativo = renderizador nativo (en iOS no hay emulacion de la GPU)")
+    .allowed({"nativo"})
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+#else
 REXCVAR_DEFINE_STRING(nfsmw_renderizador, "xenos", "NFSMW",
                       "xenos = emulacion de la GPU; nativo = renderizador nativo en desarrollo "
                       "(pieza C1: el juego corre sin emulacion y la pantalla muestra un color de "
                       "prueba)")
     .allowed({"xenos", "nativo"})
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+#endif
+
+REXCVAR_DEFINE_STRING(nfsmw_nativo_api, "vulkan", "NFSMW",
+                      "API del renderizador nativo: vulkan, o gles (OpenGL ES 3.1/3.2, solo en Android, en obras: "
+                      "por ahora el juego corre y la pantalla muestra el color de prueba, sin dibujar nada)")
+    .allowed({"vulkan", "gles"})
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 REXCVAR_DEFINE_BOOL(nfsmw_nativo_registros_vectoriales, true, "NFSMW",
@@ -715,6 +740,29 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
       return X_STATUS_SUCCESS;
     }
     app_context_ = app_context;
+#if NFSMW_CON_GLES
+    if (REXCVAR_GET(nfsmw_nativo_api) == "gles") {
+      if (!provider_gles_) {
+        provider_gles_ = rex::ui::gles::GlesProvider::Create();
+        if (!provider_gles_) {
+          REXLOG_ERROR("[nativo] No se pudo inicializar OpenGL ES");
+          return X_STATUS_UNSUCCESSFUL;
+        }
+      }
+      auto crear = [this]() { presenter_ = provider_gles_->CreatePresenter(); };
+      if (app_context_) {
+        app_context_->CallInUIThreadSynchronous(crear);
+      } else {
+        crear();
+      }
+      if (!presenter_) {
+        REXLOG_ERROR("[nativo] No se pudo crear el presentador de OpenGL ES");
+        return X_STATUS_UNSUCCESSFUL;
+      }
+      REXLOG_INFO("[nativo] Sistema grafico nativo sobre OpenGL ES (en obras: solo el color de prueba)");
+      return X_STATUS_SUCCESS;
+    }
+#endif
     if (!provider_) {
       // Steps C5c-C6: the XenosRecomp SPIR-V needs capabilities that the VkDevice only
       // enables if they are requested before it is created.
@@ -765,17 +813,29 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
     // data, so it is not distributed). Without it the game still runs, without identification.
     // Next to the executable (the app folder on Android) or, failing that, with the game files, where it
     // is easier to copy on a phone.
+    // With OpenGL ES, its own library: the same shaders with one fixed texture per register
+    // (tools/biblioteca_shaders_gles.mjs).
 #if defined(NFSC_RECOMP)
-    constexpr const char* kNombreBiblioteca = "nfscarbon_shaders.nfsp";
+    const char* const nombre_biblioteca = "nfscarbon_shaders.nfsp";
+#elif NFSMW_CON_GLES
+    const char* const nombre_biblioteca = provider_gles_ ? "nfsmw_shaders_gles.nfsp" : "nfsmw_shaders.nfsp";
 #else
-    constexpr const char* kNombreBiblioteca = "nfsmw_shaders.nfsp";
+    const char* const nombre_biblioteca = "nfsmw_shaders.nfsp";
 #endif
-    std::filesystem::path biblioteca = rex::filesystem::GetExecutableFolder() / kNombreBiblioteca;
+    std::filesystem::path biblioteca = rex::filesystem::GetExecutableFolder() / nombre_biblioteca;
     if (std::error_code ec; !std::filesystem::is_regular_file(biblioteca, ec)) {
       const std::string juego = rex::cvar::GetFlagByName("game_data_root");
-      if (!juego.empty() && std::filesystem::is_regular_file(std::filesystem::path(juego) / kNombreBiblioteca, ec)) {
-        biblioteca = std::filesystem::path(juego) / kNombreBiblioteca;
+      if (!juego.empty() && std::filesystem::is_regular_file(std::filesystem::path(juego) / nombre_biblioteca, ec)) {
+        biblioteca = std::filesystem::path(juego) / nombre_biblioteca;
       }
+#if REX_PLATFORM_IOS
+      // iOS: the one inside the app (ios/motor/compilar.sh puts it there), as the APK carries it on
+      // Android; one copied to Documents or next to the extracted game wins over it.
+      else if (const auto app = rex::filesystem::GetExecutablePath().parent_path() / nombre_biblioteca;
+               std::filesystem::is_regular_file(app, ec)) {
+        biblioteca = app;
+      }
+#endif
     }
     if (shaders_.Cargar(biblioteca)) {
       ActivarGanchos(&shaders_);  // step C5b: shader objects and Draw* records
@@ -797,7 +857,14 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
   }
 
   bool has_presentation() const override { return presenter_ != nullptr; }
-  rex::ui::GraphicsProvider* provider() const override { return provider_.get(); }
+  rex::ui::GraphicsProvider* provider() const override {
+#if NFSMW_CON_GLES
+    if (provider_gles_) {
+      return provider_gles_.get();
+    }
+#endif
+    return provider_.get();
+  }
   rex::ui::Presenter* presenter() const override { return presenter_.get(); }
 
   void SetInterruptCallback(uint32_t callback, uint32_t user_data) override {
@@ -846,6 +913,9 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
       presenter_.reset();
     }
     provider_.reset();
+#if NFSMW_CON_GLES
+    provider_gles_.reset();  // after the presenter: its context shares objects with the root one
+#endif
   }
 
  private:
@@ -1699,6 +1769,16 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
       nucleo_anillo_ = RexSwitchCurrentCore();
     }
 #endif
+#if NFSMW_CON_GLES
+    // With OpenGL ES this thread draws, so it needs its own context, shared with the presenter's.
+    if (provider_gles_) {
+      contexto_anillo_ = provider_gles_->CrearContextoHilo();
+      if (!contexto_anillo_ || !contexto_anillo_->HacerActual()) {
+        REXLOG_ERROR("[nativo] El hilo del anillo no tiene contexto de OpenGL ES: no se presentara nada");
+        contexto_anillo_.reset();
+      }
+    }
+#endif
     uint32_t leido = 0;
     uint32_t generacion = 0;
     while (activo_.load(std::memory_order_acquire)) {
@@ -1781,6 +1861,21 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
       // After returning it: the game's D3D waits sleep until this notification (nfsmw_espera_anillo.cpp).
       AvisarProgresoAnillo();
     }
+#if NFSMW_CON_GLES
+    // The context is current on this thread: its objects are deleted here, and it is released before the
+    // thread ends.
+    if (contexto_anillo_) {
+      destinos_.reset();  // its GL objects belong to this context
+      for (FramebufferGles& f : fbos_salida_gles_) {
+        if (f.fbo) {
+          glDeleteFramebuffers(1, &f.fbo);
+        }
+        f = FramebufferGles{};
+      }
+      contexto_anillo_->Soltar();
+      contexto_anillo_.reset();
+    }
+#endif
     return 0;
   }
 
@@ -2235,6 +2330,20 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
 
   // Step C2: a draw in copy mode is a resolve and/or a clear.
   bool AsegurarDestinos() {
+#if NFSMW_CON_GLES
+    if (provider_gles_) {
+      // Render targets, copies and presentation on GLES (phase 3); no draws yet (phase 4). Created on this
+      // thread, which is the one with the context.
+      if (!destinos_ && !destinos_fallidos_) {
+        destinos_ = contexto_anillo_ ? CrearDestinosGles(provider_gles_.get(), memory_) : nullptr;
+        if (!destinos_) {
+          destinos_fallidos_ = true;
+          REXLOG_ERROR("[nativo] No se pudieron crear los destinos nativos de OpenGL ES (C2)");
+        }
+      }
+      return destinos_ != nullptr;
+    }
+#endif
     if (!destinos_ && !destinos_fallidos_) {
       destinos_ = DestinosNativos::Crear(provider_ ? provider_->vulkan_device() : nullptr, memory_);
       if (!destinos_) {
@@ -3572,12 +3681,71 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
         return;
       }
     }
+#if NFSMW_CON_GLES
+    if (provider_gles_) {
+      presenter_->RefreshGuestOutput(
+          kSalidaAncho, kSalidaAlto, kSalidaAncho, kSalidaAlto,
+          [this, swap](rex::ui::Presenter::GuestOutputRefreshContext& contexto) {
+            return LimpiarSalidaGles(
+                static_cast<rex::ui::gles::GlesPresenter::GlesGuestOutputRefreshContext&>(contexto), swap);
+          });
+      return;
+    }
+#endif
     presenter_->RefreshGuestOutput(
         kSalidaAncho, kSalidaAlto, kSalidaAncho, kSalidaAlto,
         [this, swap](rex::ui::Presenter::GuestOutputRefreshContext& contexto) {
           return LimpiarSalida(static_cast<ContextoSalida&>(contexto), swap);
         });
   }
+
+#if NFSMW_CON_GLES
+  // The same test color as LimpiarSalida, plus a white band across the top eighth of the image. The guest
+  // output keeps the D3D orientation (row 0 at the top) and the presenter flips it: if the band shows at the
+  // bottom of the screen, the orientation is wrong.
+  bool LimpiarSalidaGles(rex::ui::gles::GlesPresenter::GlesGuestOutputRefreshContext& contexto, uint64_t swap) {
+    if (!contexto_anillo_) {
+      return false;
+    }
+    GLuint fbo = 0;
+    for (const FramebufferGles& f : fbos_salida_gles_) {
+      if (f.fbo && f.version == contexto.version()) {
+        fbo = f.fbo;
+      }
+    }
+    if (!fbo) {
+      FramebufferGles& f = fbos_salida_gles_[siguiente_fbo_gles_];
+      siguiente_fbo_gles_ = (siguiente_fbo_gles_ + 1) % fbos_salida_gles_.size();
+      if (!f.fbo) {
+        glGenFramebuffers(1, &f.fbo);
+      }
+      glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, contexto.texture(), 0);
+      if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        REXLOG_ERROR("[nativo] OpenGL ES: el framebuffer de la salida esta incompleto");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return false;
+      }
+      f.version = contexto.version();
+      fbo = f.fbo;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glViewport(0, 0, GLsizei(contexto.width()), GLsizei(contexto.height()));
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDisable(GL_SCISSOR_TEST);
+    const float fase = float(swap % 240) / 239.0f;
+    glClearColor(0.05f, 0.10f + 0.40f * fase, 0.35f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(0, 0, GLsizei(contexto.width()), GLsizei(contexto.height() / 8));
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    contexto.SetIs8bpc(true);
+    return true;
+  }
+#endif
 
   bool LimpiarSalida(ContextoSalida& contexto, uint64_t swap) {
     const rex::ui::vulkan::VulkanDevice* dispositivo = provider_->vulkan_device();
@@ -4567,6 +4735,19 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
   rex::ui::WindowedAppContext* app_context_ = nullptr;
   std::unique_ptr<rex::ui::vulkan::VulkanProvider> provider_;
   std::unique_ptr<rex::ui::Presenter> presenter_;
+#if NFSMW_CON_GLES
+  // With nfsmw_nativo_api = gles, instead of provider_.
+  std::unique_ptr<rex::ui::gles::GlesProvider> provider_gles_;
+  // The ring thread's, created and destroyed on that thread (BucleAnillo).
+  std::unique_ptr<rex::ui::gles::GlesProvider::ContextoHilo> contexto_anillo_;
+  struct FramebufferGles {
+    GLuint fbo = 0;
+    uint64_t version = 0;
+  };
+  // One per guest output texture (the presenter's mailbox has three).
+  std::array<FramebufferGles, 3> fbos_salida_gles_{};
+  size_t siguiente_fbo_gles_ = 0;
+#endif
 
   rex::memory::Memory* memory_ = nullptr;
   rex::runtime::FunctionDispatcher* dispatcher_ = nullptr;

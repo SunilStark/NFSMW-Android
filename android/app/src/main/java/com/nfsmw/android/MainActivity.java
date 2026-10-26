@@ -271,7 +271,7 @@ public final class MainActivity extends Activity {
         importer.execute(() -> {
             GameEdition edition = GameEdition.of(this, sharedGameRoot());
             String problem = "nativo".equals(GameOptions.get(this, GameOptions.RENDERER))
-                    ? Diagnostics.incompatibility(this) : null;
+                    && !GameOptions.usesGles(this) ? Diagnostics.incompatibility(this) : null;
             mainHandler.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 launchGame.setEnabled(true);
@@ -301,22 +301,65 @@ public final class MainActivity extends Activity {
         }
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setTitle("Probar otro renderizador")
-                .setMessage(problem + "\n\nPuedes probar el modo de compatibilidad experimental. Puede tener errores gráficos o funcionar más lento.")
-                .setPositiveButton("Probar compatibilidad", (dialog, which) -> {
+                .setMessage(problem + "\n\nPuedes usar el renderizador nativo sobre OpenGL ES (experimental, para GPUs "
+                        + "sin Vulkan compatible) o el modo de compatibilidad, que sigue usando Vulkan. Pueden tener "
+                        + "errores gráficos o funcionar más lento.")
+                .setPositiveButton("Usar OpenGL ES", (dialog, which) -> {
+                    GameOptions.set(this, GameOptions.RENDERER, "nativo");
+                    GameOptions.set(this, GameOptions.API, "gles");
+                    refreshOptions();
+                    playCompatibleGame();
+                })
+                .setNeutralButton("Compatibilidad Vulkan", (dialog, which) -> {
                     GameOptions.set(this, GameOptions.RENDERER, "xenos");
                     refreshOptions();
                     playCompatibleGame();
                 })
-                .setNeutralButton("Enviar diagnóstico", (dialog, which) -> chooseReportDestination())
                 .setNegativeButton("Volver", null).show();
     }
 
     private void playCompatibleGame() {
-        if ("xenos".equals(GameOptions.get(this, GameOptions.RENDERER)) || ShaderBuilder.hasLibrary(sharedGameRoot())) {
-            startActivity(new Intent(this, GameActivity.class));
+        boolean xenos = "xenos".equals(GameOptions.get(this, GameOptions.RENDERER));
+        if (!xenos && !ShaderBuilder.hasLibrary(sharedGameRoot())) {
+            buildShaders(true, false);
+        } else if (!xenos && GameOptions.usesGles(this) && !ShaderBuilder.hasLibrary(sharedGameRoot(), true)) {
+            // The OpenGL ES library is made from the Vulkan one.
+            buildShaders(true, true);
         } else {
-            buildShaders(true);
+            startGame();
         }
+    }
+
+    /** Starts the game; with LAN play, first the host server and the server's IP (a name is resolved here). */
+    private void startGame() {
+        if (LanSettings.MODE_OFF.equals(LanSettings.mode(this))) {
+            startActivity(new Intent(this, GameActivity.class));
+            return;
+        }
+        boolean host = LanSettings.MODE_HOST.equals(LanSettings.mode(this));
+        if (host) {
+            LanServerService.start(this);
+        }
+        launchGame.setEnabled(false);
+        importer.execute(() -> {
+            String server = LanSettings.effectiveServer(this);
+            mainHandler.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                launchGame.setEnabled(true);
+                if (server == null) {
+                    new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                            .setTitle("Multijugador LAN")
+                            .setMessage(host
+                                    ? "Este móvil no está en ninguna Wi-Fi ni da punto de acceso: nadie podría unirse."
+                                    : "No se encontró el servidor " + LanSettings.server(this) + ".")
+                            .setPositiveButton("Jugar sin LAN", (d, w) ->
+                                    startActivity(new Intent(this, GameActivity.class)))
+                            .setNegativeButton("Volver", null).show();
+                    return;
+                }
+                startActivity(new Intent(this, GameActivity.class).putExtra(GameActivity.EXTRA_LAN_SERVER, server));
+            });
+        });
     }
 
     // ---- Tester reports ------------------------------------------------------------------------------------
@@ -442,8 +485,11 @@ public final class MainActivity extends Activity {
         });
     }
 
-    /** Builds nfsmw_shaders.nfsp from the game files (a minute or two, only once). */
-    private void buildShaders(boolean thenPlay) {
+    /**
+     * Builds nfsmw_shaders.nfsp from the game files (a minute or two, only once), or with gles
+     * nfsmw_shaders_gles.nfsp from it.
+     */
+    private void buildShaders(boolean thenPlay, boolean gles) {
         if (shaderBuilder != null) {
             return;
         }
@@ -452,9 +498,10 @@ public final class MainActivity extends Activity {
         selectFolder.setEnabled(false);
         shaderPanel.setVisibility(View.VISIBLE);
         shaderProgress.setProgress(0);
-        shaderText.setText("Generando los shaders del renderizador nativo (solo la primera vez)…");
+        shaderText.setText(gles ? "Generando los shaders de OpenGL ES (solo la primera vez)…"
+                : "Generando los shaders del renderizador nativo (solo la primera vez)…");
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        shaderBuilder = new ShaderBuilder(this, sharedGameRoot(), new ShaderBuilder.Listener() {
+        shaderBuilder = new ShaderBuilder(this, sharedGameRoot(), gles, new ShaderBuilder.Listener() {
             @Override
             public void onProgress(float fraction, String text) {
                 shaderProgress.setProgress(Math.round(fraction * 1000));
@@ -467,7 +514,7 @@ public final class MainActivity extends Activity {
                 shaderPanel.setVisibility(View.GONE);
                 showChecks(sharedGameRoot());
                 if (thenPlay) {
-                    startActivity(new Intent(MainActivity.this, GameActivity.class));
+                    playCompatibleGame();  // the next library, if one is missing, or the game
                 }
             }
 
@@ -509,6 +556,133 @@ public final class MainActivity extends Activity {
                     controls.edit().putBoolean("stretch", !stretch).apply();
                     refreshOptions();
                 }));
+
+        TextView lan = label("MULTIJUGADOR LAN · EXPERIMENTAL", 12, ACCENT, true);
+        lan.setPadding(0, dp(14), 0, dp(2));
+        optionsList.addView(lan);
+        optionsList.addView(optionRow("Modo LAN", LanSettings.describe(this), this::chooseLanMode));
+        String gamertag = LanSettings.gamertag(this);
+        optionsList.addView(optionRow("Gamertag", gamertag.isEmpty() ? "User (cada móvil necesita uno distinto)"
+                : gamertag, this::editGamertag));
+        if (LanSettings.MODE_JOIN.equals(LanSettings.mode(this))) {
+            String server = LanSettings.server(this);
+            optionsList.addView(optionRow("Servidor", server.isEmpty() ? "Buscar o escribir la IP" : server,
+                    this::chooseLanServer));
+        }
+    }
+
+    // ---- LAN multiplayer -----------------------------------------------------------------------------------
+
+    private void chooseLanMode() {
+        String[] modes = {LanSettings.MODE_OFF, LanSettings.MODE_JOIN, LanSettings.MODE_HOST};
+        String[] labels = {"Desactivado", "Unirse a un servidor (PC u otro móvil)",
+                "Anfitrión: este móvil hace de servidor"};
+        int checked = java.util.Arrays.asList(modes).indexOf(LanSettings.mode(this));
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Multijugador LAN")
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    dialog.dismiss();
+                    String mode = modes[which];
+                    LanSettings.mode(this, mode);
+                    if (LanSettings.MODE_HOST.equals(mode)) {
+                        // The server's notification (its IP, the players and the stop button).
+                        if (Build.VERSION.SDK_INT >= 33) {
+                            requestPermissions(new String[] {"android.permission.POST_NOTIFICATIONS"}, 47);
+                        }
+                        LanServerService.start(this);
+                    } else {
+                        LanServerService.stop(this);
+                    }
+                    refreshOptions();
+                    if (LanSettings.MODE_JOIN.equals(mode) && LanSettings.server(this).isEmpty()) {
+                        chooseLanServer();
+                    } else if (!LanSettings.MODE_OFF.equals(mode)) {
+                        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                                .setTitle("Cómo jugar en LAN")
+                                .setMessage("Todos en la misma Wi-Fi (o en el punto de acceso del anfitrión), cada "
+                                        + "uno con un gamertag distinto. En el juego: Xbox Live → Partida rápida. Uno "
+                                        + "crea la partida y los demás se unen. Es experimental; el modo individual "
+                                        + "no cambia.")
+                                .setPositiveButton("Entendido", null).show();
+                    }
+                })
+                .setNegativeButton("Cancelar", null).show();
+    }
+
+    private void editGamertag() {
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine(true);
+        input.setText(LanSettings.gamertag(this));
+        input.setFilters(new android.text.InputFilter[] {new android.text.InputFilter.LengthFilter(15)});
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Gamertag")
+                .setMessage("Hasta 15 letras, números y espacios, empezando por letra. Tus partidas guardadas no cambian.")
+                .setView(input)
+                .setPositiveButton("Guardar", (dialog, which) -> {
+                    String value = input.getText().toString().trim();
+                    if (!LanSettings.validGamertag(value)) {
+                        reportError("Gamertag no válido: hasta 15 letras, números y espacios, empezando por letra.");
+                        return;
+                    }
+                    LanSettings.gamertag(this, value);
+                    refreshOptions();
+                })
+                .setNegativeButton("Cancelar", null).show();
+    }
+
+    private void chooseLanServer() {
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine(true);
+        input.setHint("192.168.1.20");
+        input.setText(LanSettings.server(this));
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Servidor LAN")
+                .setMessage("La IP del PC con nfsmw-server-lan o del móvil anfitrión.")
+                .setView(input)
+                .setPositiveButton("Guardar", (dialog, which) -> {
+                    String value = input.getText().toString().trim();
+                    if (!LanSettings.validAddress(value)) {
+                        reportError("Dirección no válida.");
+                        return;
+                    }
+                    LanSettings.server(this, value);
+                    refreshOptions();
+                })
+                .setNeutralButton("Buscar en la red", (dialog, which) -> searchLanServers())
+                .setNegativeButton("Cancelar", null).show();
+    }
+
+    private void searchLanServers() {
+        AlertDialog searching = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setMessage("Buscando servidores en la red local…").setCancelable(false).show();
+        importer.execute(() -> {
+            java.util.List<BuscadorServidores.Encontrado> found = BuscadorServidores.buscar();
+            mainHandler.post(() -> {
+                searching.dismiss();
+                if (isFinishing() || isDestroyed()) return;
+                if (found == null) {
+                    reportError("Este móvil no está en ninguna red local.");
+                    return;
+                }
+                if (found.isEmpty()) {
+                    reportError("No se encontró ningún servidor. Escribe la IP del anfitrión a mano.");
+                    return;
+                }
+                String[] items = new String[found.size()];
+                for (int i = 0; i < items.length; i++) {
+                    BuscadorServidores.Encontrado e = found.get(i);
+                    items[i] = (e.nombre.isEmpty() ? e.ip : e.nombre + " · " + e.ip) + " · " + e.jugadores
+                            + (e.jugadores == 1 ? " jugador" : " jugadores");
+                }
+                new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("Servidores encontrados")
+                        .setItems(items, (dialog, which) -> {
+                            LanSettings.server(this, found.get(which).ip);
+                            refreshOptions();
+                        })
+                        .setNegativeButton("Cancelar", null).show();
+            });
+        });
     }
 
     private void chooseDriver() {
@@ -871,7 +1045,7 @@ public final class MainActivity extends Activity {
                 mainHandler.post(() -> {
                     showSharedGameFolder(null);
                     if ("nativo".equals(GameOptions.get(this, GameOptions.RENDERER)) &&
-                            !ShaderBuilder.hasLibrary(sharedGameRoot())) buildShaders(false);
+                            !ShaderBuilder.hasLibrary(sharedGameRoot())) buildShaders(false, false);
                 });
             } catch (Exception error) {
                 try { deleteRecursively(staging); } catch (IOException ignored) {}

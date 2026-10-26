@@ -42,11 +42,17 @@ final class GameOptions {
     static final String RESOLUTION = "resolution";
     static final String FPS = "fps";
     static final String RENDERER = "renderer";
+    static final String API = "graphics_api";
 
     static final Option[] ALL = {
             new Option(RENDERER, "Renderizador", "nfsmw_renderizador", "nativo",
                     new String[] {"nativo", "xenos"},
                     new String[] {"Nativo", "Compatibilidad · experimental"}),
+            // The native renderer's OpenGL ES backend (from NFSMW-Recompiled-Mobile), for GPUs whose Vulkan driver
+            // lacks what the Vulkan backend needs (Mali-T8xx/G71/G72, Adreno 5xx...). It uses its own shader library.
+            new Option(API, "API gráfica", "nfsmw_nativo_api", "vulkan",
+                    new String[] {"vulkan", "gles"},
+                    new String[] {"Vulkan · recomendado", "OpenGL ES 3.2 · GPUs sin Vulkan compatible (experimental)"}),
             new Option("gpu_stability", "Estabilidad gráfica", "nfsmw_consultas_oclusion", "auto",
                     new String[] {"auto", "off", "on"},
                     new String[] {"Automática · protección Mali", "Máxima compatibilidad · sin destello solar",
@@ -126,9 +132,17 @@ final class GameOptions {
         prefs(context).edit().putString(key, value).apply();
     }
 
+    /** The native renderer on its OpenGL ES backend: it needs nfsmw_shaders_gles.nfsp. */
+    static boolean usesGles(Context context) {
+        return "nativo".equals(get(context, RENDERER)) && "gles".equals(get(context, API));
+    }
+
     static List<String> arguments(Context context) {
         List<String> args = new ArrayList<>();
         for (Option o : ALL) {
+            if (o.key.equals(API) && !"nativo".equals(get(context, RENDERER))) {
+                continue;  // the Xenos renderer is Vulkan only
+            }
             args.add("--" + o.cvar + "=" + get(context, o.key));
         }
         if ("xenos".equals(get(context, RENDERER))) {

@@ -7,6 +7,10 @@
 // At startup, before the game creates its threads (they inherit the mask), every thread of the process is
 // limited to the cores whose top clock is at least 70 % of the fastest one. SoCs without a slow cluster
 // (Snapdragon 8 Elite: 4.32 and 3.53 GHz) keep every core.
+//
+// Nor when fewer than four cores are fast (2+6 of the Snapdragon 680/695 and Helio G, 2+4 of the Snapdragon
+// 650): the game's ring, main, audio and shader threads and the driver's would share two cores, worse than letting
+// the scheduler use the little ones (from dvaustria741-a11y, victorgbd/NFSMW-Recompiled-Mobile d9c90ea).
 #include <sched.h>
 #include <unistd.h>
 
@@ -28,10 +32,17 @@ REXCVAR_DEFINE_BOOL(nfsmw_android_nucleos_grandes, true, "NFSMW",
 
 namespace {
 
+// The core's top clock, or on kernels without cpufreq for it its cpu_capacity (0-1024, same proportions).
+// 0 = unknown (an offline core).
 long RelojMaximoKhz(int cpu) {
-  std::ifstream f("/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cpufreq/cpuinfo_max_freq");
-  long khz = 0;
-  return (f >> khz) ? khz : 0;
+  const std::string base = "/sys/devices/system/cpu/cpu" + std::to_string(cpu);
+  long valor = 0;
+  if (std::ifstream f(base + "/cpufreq/cpuinfo_max_freq"); f >> valor && valor > 0) {
+    return valor;
+  }
+  valor = 0;
+  std::ifstream capacidad(base + "/cpu_capacity");
+  return (capacidad >> valor) ? valor * 1000 : 0;
 }
 
 }  // namespace
@@ -65,8 +76,12 @@ extern "C" void nfsmw_android_nucleos_grandes_aplicar() {
       lista += (lista.empty() ? "" : ",") + std::to_string(cpu);
     }
   }
-  if (elegidos == total || elegidos < 2) {
+  if (elegidos == total) {
     REXLOG_INFO("[android] {} nucleos sin grupo lento: afinidad sin cambios", total);
+    return;
+  }
+  if (elegidos < 4) {
+    REXLOG_INFO("[android] solo {} nucleos rapidos de {} ({}): afinidad sin cambios", elegidos, total, lista);
     return;
   }
   // Every thread that already exists (the SDL thread, the UI thread, the logger); the ones created later

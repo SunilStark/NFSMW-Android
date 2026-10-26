@@ -13,9 +13,13 @@
 
 #include <fmt/format.h>
 
+#include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xam/user_profile.h>
+
+// Profile name, for LAN play where every phone needs its own (from victorgbd/NFSMW-Recompiled-Mobile e43bf99).
+REXCVAR_DEFINE_STRING(user_gamertag, "User", "Kernel", "Xbox 360 profile gamertag: up to 15 characters");
 
 namespace rex {
 namespace system {
@@ -26,7 +30,11 @@ UserProfile::UserProfile() {
   // if non-zero, it prevents the user from playing the game.
   // "You do not have permissions to perform this operation."
   xuid_ = 0xB13EBABEBABEBABE;
-  name_ = "User";
+  // Only the name changes: the XUID stays, so saved games keep their place.
+  name_ = REXCVAR_GET(user_gamertag).substr(0, 15);
+  if (name_.empty()) {
+    name_ = "User";
+  }
 
   // https://cs.rin.ru/forum/viewtopic.php?f=38&t=60668&hilit=gfwl+live&start=195
   // https://github.com/arkem/py360/blob/master/py360/constants.py

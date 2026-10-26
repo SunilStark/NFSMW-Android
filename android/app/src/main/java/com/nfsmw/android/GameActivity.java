@@ -52,6 +52,7 @@ public final class GameActivity extends SDLActivity
         implements TouchControlsView.Host, InputManager.InputDeviceListener, SensorEventListener {
     private static final String TAG = "NFSMW";
     private static final String SETTINGS = "nfsmw.toml";
+    static final String EXTRA_LAN_SERVER = "lan_server";
 
     private String gameRoot;
     private String userRoot;
@@ -182,6 +183,8 @@ public final class GameActivity extends SDLActivity
         args.add("--cache_root=" + cacheRoot);
         // The launcher's graphics options win over nfsmw.toml.
         args.addAll(GameOptions.arguments(this));
+        // LAN play: the server address MainActivity resolved before starting the game (null = none).
+        LanSettings.arguments(this, getIntent().getStringExtra(EXTRA_LAN_SERVER), args);
         if (getSharedPreferences("nfsmw_controls", MODE_PRIVATE).getBoolean("stretch", true)) {
             args.add("--present_letterbox=false");
             args.add("--present_safe_area_x=100");
