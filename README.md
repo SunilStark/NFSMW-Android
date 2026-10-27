@@ -18,11 +18,13 @@ This project brings the [nfsmw-nx](https://github.com/StevensND/nfsmw-nx) recomp
 - **Graphics presets:** Battery, Balanced, Performance and Quality, with personal settings that survive consecutive presets. These are option bundles, without measured FPS or battery gains.
 - Builds on the owner's 0.8.0 GLES, experimental LAN and compatibility work. Release compilation and file/preset tests pass; this delivery has no physical-device or emulator validation. See [implementation](docs/EVOLVED_2_IMPLEMENTATION.md) and [test results](docs/EVOLVED_2_TEST_RESULTS.md).
 
+Version 0.8.2 adds [edition-specific Android build infrastructure](docs/ANDROID_EDITIONS.md), strict XEX-to-module selection and edition-bound shader caches. The published APK still includes **PAL Spain only**; other regional binaries require their own executables, preparation and testing. There is no physical-device or emulator validation of 0.8.2.
+
 ## Requirements
 
 - Android 8 or later on an ARM64 processor (ARMv8.0 or later).
 - A GPU with **Vulkan 1.1 or later** and the required *descriptor indexing* features, or the **experimental OpenGL ES 3.2 path** introduced in 0.8.0. Vulkan exposes those features through Vulkan 1.2 or `VK_EXT_descriptor_indexing` in 1.1; a recent version alone does not guarantee them. The native path does not need `shaderInt64` or buffer device address. GLES compatibility still requires device-specific testing.
-- Your own copy of **Need for Speed: Most Wanted (2005), Xbox 360, PAL Spain edition**, extracted, with `default.xex`, `NFS/` and `Movies/`. This APK is built for that edition's executable. With another edition the game closes at startup, and the launcher warns you. Files from the PC or PS2 versions, or an unextracted ISO, will not work.
+- Your own copy of **Need for Speed: Most Wanted (2005), Xbox 360, PAL Spain edition**, extracted, with `default.xex`, `NFS/` and `Movies/`. This APK is built for that edition's executable. The launcher blocks executables without a matching compiled module. Files from the PC or PS2 versions, or an unextracted ISO, will not work.
 - Enough internal storage for the APK, the game folder and the generated files.
 
 Tested on a **Samsung Galaxy S25 Ultra** (Adreno 830) and a **Galaxy A55** (Xclipse 530). Tester reports also cover several Mali GPUs (G57, G615, G68, G720).

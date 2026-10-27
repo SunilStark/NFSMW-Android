@@ -153,6 +153,7 @@ async function main() {
   const xex = await fetchBytes(GAME + 'default.xex');
   const xexHash = await sha256(xex);
   const build = manifest.builds.find((b) => b.xex_sha256 === xexHash);
+  if (!build) throw new Error('Esta edición no tiene una receta de shaders verificada.');
   const { image } = await readXexImage(xex, async (compressed, bits, size) => {
     lzx.FS.writeFile('/i.lzx', compressed);
     if (lzx.callMain(['/i.lzx', '/i.bin', String(bits), String(size)])) {
@@ -177,7 +178,7 @@ async function main() {
   const containers = [...disc.found, ...executable.found];
   progress(0.4, `Encontrados ${containers.length} shaders. Traduciendo…`);
 
-  const blurSha = build ? build.blur_container_sha256 : manifest.builds[0].blur_container_sha256;
+  const blurSha = build.blur_container_sha256;
   let blurShader = null;
   for (const c of containers) {
     if ((await sha256(c.bytes)) === blurSha) {

@@ -51,6 +51,25 @@ import java.util.List;
 public final class GameActivity extends SDLActivity
         implements TouchControlsView.Host, InputManager.InputDeviceListener, SensorEventListener {
     static volatile boolean gameRunning;
+    private static String loadedLibrary;
+    private CompiledEditions.Entry edition;
+
+    static synchronized boolean canLoad(GameEdition candidate) {
+        return candidate != null && candidate.supported()
+                && (loadedLibrary == null || loadedLibrary.equals(candidate.compiled.library));
+    }
+
+    @Override
+    protected String[] getLibraries() {
+        synchronized (GameActivity.class) {
+            if (edition == null || (loadedLibrary != null && !loadedLibrary.equals(edition.library))) {
+                throw new IllegalStateException("Edición no compilada o se necesita reiniciar la aplicación");
+            }
+            loadedLibrary = edition.library;
+        }
+        return new String[]{"SDL3", edition.library};
+    }
+
     private static final String TAG = "NFSMW";
     private static final String SETTINGS = "nfsmw.toml";
     static final String EXTRA_LAN_SERVER = "lan_server";
@@ -68,11 +87,19 @@ public final class GameActivity extends SDLActivity
 
     @Override
     protected void onCreate(Bundle state) {
-        gameRunning = true;
+        GameEdition detected = GameEdition.of(this, new File(Environment.getExternalStorageDirectory(),
+                MainActivity.GAME_FOLDER_NAME));
+        // getLibraries throws inside SDL's guarded loader if the file changed after the launcher check.
+        // SDL then shows an error and returns without starting a native thread.
+        edition = canLoad(detected) ? detected.compiled : null;
+        gameRunning = edition != null;
         File appRoot = new File(getFilesDir(), "nfsmw");
         gameRoot = new File(Environment.getExternalStorageDirectory(), MainActivity.GAME_FOLDER_NAME).getAbsolutePath();
         userRoot = new File(appRoot, "user").getAbsolutePath();
         cacheRoot = new File(appRoot, "cache").getAbsolutePath();
+        if (edition != null && !"pal_es".equals(edition.id)) {
+            cacheRoot = new File(cacheRoot, edition.id).getAbsolutePath();
+        }
         new File(userRoot).mkdirs();
         new File(cacheRoot).mkdirs();
         // The native side keeps nfsmw.toml, the pipeline cache and its logs in the "executable folder", which
@@ -85,6 +112,10 @@ public final class GameActivity extends SDLActivity
         installSettings();
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         super.onCreate(state);
+        if (mBrokenLibraries) {
+            gameRunning = false;
+            return;
+        }
         useWholeScreen();
 
         ViewGroup root = findViewById(android.R.id.content);
@@ -151,6 +182,7 @@ public final class GameActivity extends SDLActivity
     @Override
     protected void onResume() {
         super.onResume();
+        if (mBrokenLibraries || controls == null) return;
         if (inputManager != null) {
             inputManager.registerInputDeviceListener(this, null);
             refreshGamepads();
@@ -175,7 +207,7 @@ public final class GameActivity extends SDLActivity
         if (sensorManager != null) {
             sensorManager.unregisterListener(this);
         }
-        if (controls.isEditing()) {
+        if (controls != null && controls.isEditing()) {
             controls.setEditing(false);
         }
         super.onPause();
@@ -187,6 +219,8 @@ public final class GameActivity extends SDLActivity
         args.add("--game_data_root=" + gameRoot);
         args.add("--user_data_root=" + userRoot);
         args.add("--cache_root=" + cacheRoot);
+        args.add("--user_language=" + edition.language);
+        args.add("--user_country=" + edition.country);
         // The launcher's graphics options win over nfsmw.toml.
         args.addAll(GameOptions.arguments(this));
         // LAN play: the server address MainActivity resolved before starting the game (null = none).

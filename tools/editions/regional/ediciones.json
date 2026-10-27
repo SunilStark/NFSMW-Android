@@ -1,0 +1,97 @@
+{
+  "referencia": "pal_es",
+  "ediciones": {
+    "pal_es": {
+      "nombre": "PAL España",
+      "pdb": "NfsMWEuropeSpanRelease.pdb",
+      "sha256": ["aad15fc218d034de3131f746e0b763dd8049a40dd676efc87667fcaf4fc72694"],
+      "idioma": 5,
+      "pais": 31
+    },
+    "usa": {
+      "nombre": "USA",
+      "pdb": "NfsMWRelease.pdb",
+      "sha256": ["aebdf3c14d1e4e4ed2c130d94bc1a0e97bd6d5bf39bdfdef33c3909c9cc4ba4c"],
+      "idioma": 1,
+      "pais": 103,
+      "nativo": {
+        "huellas_shaders": {
+          "E849A9F6D3323B87": "CBE1085BC16100E7",
+          "28AA3CDAC6C19705": "BD5DF403A547935F"
+        }
+      }
+    },
+    "jpn": {
+      "nombre": "Japón",
+      "pdb": "NfsMWJapanRelease.pdb",
+      "sha256": ["23af89d49a713ff948af7b9bc06557b06e94e8629adc40a29513ab6f5cafb33d"],
+      "idioma": 2,
+      "pais": 53,
+      "nativo": {
+        "huellas_shaders": {
+          "E849A9F6D3323B87": "CBE1085BC16100E7",
+          "28AA3CDAC6C19705": "D18B13A41506E263",
+          "19C0C358044A29BF": "BDA897AD5D6FF1D7"
+        }
+      }
+    },
+    "pal_de": {
+      "nombre": "PAL Alemania",
+      "nota": "La misma compilacion que la espanola con otro idioma (nfsmw-nx). SHA-256 de su instalador; sin probar aqui.",
+      "sha256": ["23ece29d18724ea28971d52f936964d127148bd2359ff24795da7442b9069bf4"],
+      "tabla": "pal_es",
+      "idioma": 3,
+      "pais": 24
+    },
+    "pal_it": {
+      "nombre": "PAL Italia",
+      "nota": "La misma compilacion que la espanola con otro idioma (nfsmw-nx). SHA-256 de su instalador; sin probar aqui.",
+      "sha256": ["acb09332bcafc15e8e21dc15062f1963804a3176fa4db48fea7f6c8afbdff066"],
+      "tabla": "pal_es",
+      "idioma": 6,
+      "pais": 50
+    },
+    "pal_fr": {
+      "nombre": "PAL Francia",
+      "nota": "La misma compilacion que la espanola con otro idioma (nfsmw-nx). SHA-256 de su instalador; sin probar aqui.",
+      "sha256": ["229c5ed5dcc67871982000fb923acfd59494f21f30996b25f36b30a8d85c9b7b"],
+      "tabla": "pal_es",
+      "idioma": 4,
+      "pais": 34
+    },
+    "pal_en": {
+      "nombre": "PAL Reino Unido",
+      "nota": "Otra compilacion, parecida a la USA (nfsmw-nx). La traduccion rusa de fans usa este mismo XEX. Sin probar aqui.",
+      "sha256": ["e2ea2ff11bf84cb30430d824d7bfe699a3acf3e7400d21b9a7c938e3d7a10474"],
+      "idioma": 1,
+      "pais": 35
+    },
+    "pal_pl": {
+      "nombre": "PAL Polonia (fans)",
+      "nota": "Traduccion de fans sobre la PAL inglesa: su XEX va sin cifrar ni comprimir y cambia un salto (0x8228753C, beq -> nop). El juego sigue en ingles: sus textos sustituyen a los ingleses. Sin probar aqui.",
+      "sha256": ["a2dd0156c26603cf32e33b52fa906422bde74e5065da87115d5b747aa5d90ff8"],
+      "idioma": 1,
+      "pais": 82
+    },
+    "kor": {
+      "nombre": "Corea",
+      "nota": "Otra compilacion (nfsmw-nx). Sin probar aqui.",
+      "sha256": ["47683b515e5461a2e356c45a4417f30fe69c3f6c6ea0d3352829f35f1fb33abe"],
+      "idioma": 7,
+      "pais": 56
+    },
+    "cht": {
+      "nombre": "Asia (chino tradicional)",
+      "nota": "Otra compilacion (nfsmw-nx). Sin probar aqui.",
+      "sha256": ["0cd7b9fa3957de085e298c91faa726116ad0079abaefead82c2f3337ee432e64"],
+      "idioma": 8,
+      "pais": 101
+    }
+  },
+  "europeas": {
+    "pal_de": {"nombre": "PAL Alemania", "pdb_empieza": ["ger", "deu"], "idioma": 3, "pais": 24},
+    "pal_it": {"nombre": "PAL Italia", "pdb_empieza": ["ita"], "idioma": 6, "pais": 50},
+    "pal_fr": {"nombre": "PAL Francia", "pdb_empieza": ["fre", "fra"], "idioma": 4, "pais": 34},
+    "pal_es": {"nombre": "PAL España", "pdb_empieza": ["spa", "esp"], "idioma": 5, "pais": 31}
+  }
+}

@@ -12,11 +12,13 @@ APK nativo · Vulkan 1.1+ · controles táctiles · generación local de shaders
 
 Este proyecto adapta a Android el trabajo de recompilación de [nfsmw-nx](https://github.com/StevensND/nfsmw-nx) y el SDK [ReXGlue](https://github.com/rexglue/rexglue-sdk). La aplicación usa código C++ recompilado, SDL3 y el renderizador nativo sobre Vulkan. No emula una Xbox 360 ni incluye los archivos del juego.
 
+La versión 0.8.2 añade la [infraestructura de compilación por edición](docs/ANDROID_EDITIONS.md), selección estricta del módulo por XEX y cachés de shaders vinculadas al ejecutable. El APK publicado sigue incluyendo **solo PAL España**; las otras regiones necesitan sus ejecutables, preparación y pruebas. Esta versión no tiene prueba en teléfono ni emulador.
+
 ## Requisitos
 
 - Android 8 o posterior y procesador ARM64 (ARMv8.0 o posterior).
 - GPU con **Vulkan 1.1 o posterior** y las funciones necesarias de *descriptor indexing*, o la ruta **OpenGL ES 3.2 experimental** incorporada en 0.8.0. Vulkan expone esas funciones mediante Vulkan 1.2 o `VK_EXT_descriptor_indexing` en 1.1; una versión reciente no las garantiza. No hacen falta `shaderInt64` ni *buffer device address* en la ruta nativa. La compatibilidad de GLES requiere pruebas por dispositivo.
-- Una copia propia de **Need for Speed: Most Wanted (2005), Xbox 360, edición PAL España**, extraída y con `default.xex`, `NFS/` y `Movies/`. Este APK se compila para el ejecutable de esa edición; con otra edición el juego se cierra al arrancar y el launcher te avisa. Los archivos de la versión de PC, PS2 o una ISO sin extraer no sirven.
+- Una copia propia de **Need for Speed: Most Wanted (2005), Xbox 360, edición PAL España**, extraída y con `default.xex`, `NFS/` y `Movies/`. Este APK se compila para el ejecutable de esa edición; el launcher bloquea ejecutables sin un módulo compilado incluido. Los archivos de la versión de PC, PS2 o una ISO sin extraer no sirven.
 - Espacio en la memoria interna para el APK, la carpeta del juego y los archivos generados.
 
 Probado en un **Samsung Galaxy S25 Ultra** (Adreno 830), un **Galaxy A55** (Xclipse 530) y varios Mali (G57, G615, G68, G720) según los informes de los testers.

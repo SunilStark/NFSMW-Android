@@ -74,6 +74,11 @@ def traducir_texto(texto, mapa, faltan):
 
 def main():
     edicion, tabla, xex = sys.argv[1:4]
+    if not re.fullmatch(r'[a-z][a-z0-9_]{0,31}', edicion):
+        raise SystemExit('Invalid edition ID')
+    destino_real = os.path.realpath(os.path.join(RAIZ, 'app_' + edicion))
+    if os.path.dirname(destino_real) != os.path.realpath(RAIZ):
+        raise SystemExit('Edition tree must remain inside the project')
     resto = sys.argv[4:]
     # --parejas <json>: {"parejas": {PAL: other}} fixes functions that emparejar.py could not place (code
     # changed around them), and {"nuevas": {other: file}} places unpaired functions where they do not

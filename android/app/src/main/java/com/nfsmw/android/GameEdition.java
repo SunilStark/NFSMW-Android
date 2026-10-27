@@ -12,33 +12,30 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
 
-/**
- * Which edition of the game default.xex is.
- *
- * The recompiled code inside the APK comes from the PAL Spanish executable. Another edition starts at a
- * different entry point (0x8262E768 or 0x8262E9A8 instead of 0x8262E960) and the game closes at once with
- * "No function registered at ..." (app/overrides.toml). The launcher checks the SHA-256 of default.xex
- * against the installer's manifest (assets/shaders/release/manifest.json) and explains it before starting.
- */
+/** XEX identity and the native module actually included in this APK. */
 final class GameEdition {
     static final String SUPPORTED_SHA256 = "aad15fc218d034de3131f746e0b763dd8049a40dd676efc87667fcaf4fc72694";
     static final String SUPPORTED_NAME = "PAL (España)";
     private static final String PREFS = "nfsmw_edition";
 
+    private static final java.util.List<CompiledEditions.Entry> COMPILED =
+            CompiledEditions.parse(BuildConfig.GAME_EDITIONS);
+    final CompiledEditions.Entry compiled;
     final String sha256;
     final String name;  // the manifest's edition, or null if the executable is not in it
 
     private GameEdition(String sha256, String name) {
+        this.compiled = CompiledEditions.find(COMPILED, sha256);
         this.sha256 = sha256;
         this.name = name;
     }
 
     boolean supported() {
-        return SUPPORTED_SHA256.equals(sha256);
+        return compiled != null;
     }
 
     String describe() {
-        if (supported()) return SUPPORTED_NAME;
+        if (supported()) return compiled.name;
         return name != null ? name : "desconocida";
     }
 
@@ -47,22 +44,34 @@ final class GameEdition {
         File xex = new File(gameRoot, "default.xex");
         if (!xex.isFile()) return null;
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        String key = xex.length() + ":" + xex.lastModified();
+        String key = xex.getAbsolutePath() + ":" + xex.length() + ":" + xex.lastModified();
         String sha = key.equals(prefs.getString("key", "")) ? prefs.getString("sha256", null) : null;
         if (sha == null) {
-            try (InputStream in = new FileInputStream(xex)) {
-                MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                byte[] buffer = new byte[1 << 16];
-                for (int n; (n = in.read(buffer)) > 0; ) digest.update(buffer, 0, n);
-                StringBuilder hex = new StringBuilder();
-                for (byte b : digest.digest()) hex.append(String.format("%02x", b));
-                sha = hex.toString();
-            } catch (Exception e) {
-                return null;
-            }
+            sha = hash(xex);
+            if (sha == null) return null;
             prefs.edit().putString("key", key).putString("sha256", sha).apply();
         }
         return new GameEdition(sha, editionName(context, sha));
+    }
+
+    static String compiledNames() {
+        StringBuilder names = new StringBuilder();
+        for (CompiledEditions.Entry entry : COMPILED) {
+            if (names.length() > 0) names.append(", ");
+            names.append(entry.name);
+        }
+        return names.toString();
+    }
+
+    static String hash(File file) {
+        try (InputStream in = new FileInputStream(file)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[1 << 16];
+            for (int n; (n = in.read(buffer)) > 0;) digest.update(buffer, 0, n);
+            StringBuilder hex = new StringBuilder();
+            for (byte b : digest.digest()) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (Exception e) { return null; }
     }
 
     private static String editionName(Context context, String sha) {

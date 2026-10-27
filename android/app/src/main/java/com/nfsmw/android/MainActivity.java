@@ -282,18 +282,16 @@ public final class MainActivity extends Activity {
             mainHandler.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 launchGame.setEnabled(true);
-                if (edition != null && !edition.supported()) {
-                    // Another edition closes at once with "No function registered at 8262E768" (or 8262E9A8).
+                if (edition == null || !edition.supported() || !GameActivity.canLoad(edition)) {
+                    String reason = edition == null ? "No se puede leer default.xex. Comprueba la copia del juego."
+                            : !edition.supported() ? "Tu ejecutable es de la edición " + edition.describe()
+                                    + ". Este APK incluye: " + GameEdition.compiledNames()
+                                    + ". Cada edición necesita su propia compilación."
+                            : "Para cambiar de edición, cierra completamente la aplicación y vuelve a abrirla.";
                     new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                            .setTitle("Edición del juego no compatible")
-                            .setMessage("Tu default.xex es de la edición " + edition.describe() + ". Esta versión "
-                                    + "de la app está recompilada a partir de la edición " + GameEdition.SUPPORTED_NAME
-                                    + " y con otra edición el juego se cierra al arrancar.\n\nUsa una copia de la edición "
-                                    + GameEdition.SUPPORTED_NAME + " (el SHA-256 de su default.xex empieza por "
-                                    + GameEdition.SUPPORTED_SHA256.substring(0, 12) + ").")
-                            .setPositiveButton("Volver", null)
-                            .setNeutralButton("Jugar igualmente", (dialog, which) -> continuePlay(problem))
-                            .show();
+                            .setTitle("No se puede iniciar esta edición")
+                            .setMessage(reason)
+                            .setPositiveButton("Volver", null).show();
                     return;
                 }
                 continuePlay(problem);

@@ -89,7 +89,14 @@ final class ShaderBuilder {
         return gles ? LIBRARY_GLES_VERSION : LIBRARY_VERSION;
     }
 
-    /** Whether the game folder already has a library of the current version. */
+    private static String version(File root, boolean gles) {
+        String hash = GameEdition.hash(new File(root, "default.xex"));
+        if (hash == null) return "missing-xex";
+        // Keep the existing PAL cache valid; other executables must never reuse it.
+        return GameEdition.SUPPORTED_SHA256.equals(hash) ? version(gles) : version(gles) + ":" + hash;
+    }
+
+    /** Whether the game folder already has a library of the current version and XEX. */
     static boolean hasLibrary(File gameRoot) {
         return hasLibrary(gameRoot, false);
     }
@@ -100,9 +107,9 @@ final class ShaderBuilder {
             return false;
         }
         try (InputStream in = new FileInputStream(new File(gameRoot, name(gles) + ".version"))) {
-            byte[] buffer = new byte[64];
+            byte[] buffer = new byte[160];
             int n = in.read(buffer);
-            return n > 0 && version(gles).equals(new String(buffer, 0, n, "UTF-8").trim());
+            return n > 0 && version(gameRoot, gles).equals(new String(buffer, 0, n, "UTF-8").trim());
         } catch (IOException e) {
             return false;
         }
@@ -268,7 +275,7 @@ final class ShaderBuilder {
                     throw new IOException("no se pudo guardar " + library);
                 }
                 try (FileOutputStream out = new FileOutputStream(new File(gameRoot, library + ".version"))) {
-                    out.write(version(gles).getBytes("UTF-8"));
+                    out.write(version(gameRoot, gles).getBytes("UTF-8"));
                     out.getFD().sync();
                 }
                 Log.i(TAG, "[shaders] " + library + " " + bytes.length + " bytes, SHA-256 " + sha256 +

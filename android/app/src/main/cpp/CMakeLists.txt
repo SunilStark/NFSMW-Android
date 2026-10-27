@@ -22,7 +22,16 @@ set(REXGLUE_RECOMP_DEBUG_INFO "none" CACHE STRING "Omit debug tables for the lar
 set(SDL_SHARED ON CACHE BOOL "SDL shared library loaded by SDLActivity" FORCE)
 set(SDL_STATIC OFF CACHE BOOL "Use SDL's shared Android library" FORCE)
 
-add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../../../../../app" "nfsmw-app")
+set(NFSMW_EDITION_APP "app" CACHE STRING "Prepared edition source tree")
+if(NOT NFSMW_EDITION_APP MATCHES "^(app|app_[a-z][a-z0-9_]*)$")
+    message(FATAL_ERROR "Invalid edition source tree")
+endif()
+set(NFSMW_EDITION_LIBRARY "main" CACHE STRING "Edition shared library name")
+if(NOT NFSMW_EDITION_LIBRARY MATCHES "^(main|main_[a-z][a-z0-9_]*)$")
+    message(FATAL_ERROR "Invalid edition library name")
+endif()
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../../../../../${NFSMW_EDITION_APP}" "nfsmw-app")
+set_target_properties(nfsmw PROPERTIES OUTPUT_NAME "${NFSMW_EDITION_LIBRARY}")
 target_sources(nfsmw PRIVATE "${CMAKE_CURRENT_LIST_DIR}/android_touch.cpp"
                              "${CMAKE_CURRENT_LIST_DIR}/android_rendimiento.cpp")
 
