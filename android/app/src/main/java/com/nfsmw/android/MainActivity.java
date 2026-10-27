@@ -565,6 +565,19 @@ public final class MainActivity extends Activity {
                     refreshOptions();
                 }));
 
+        TextView keyboardTitle = label("TECLADO", 12, ACCENT, true);
+        keyboardTitle.setPadding(0, dp(14), 0, dp(2));
+        optionsList.addView(keyboardTitle);
+        boolean keyboard = KeyboardBindings.enabled(this);
+        optionsList.addView(optionRow("Jugar con teclado",
+                keyboard ? "Activado · es el mando del jugador 1" : "Desactivado", () -> {
+                    KeyboardBindings.setEnabled(this, !keyboard);
+                    refreshOptions();
+                }));
+        if (keyboard) {
+            optionsList.addView(optionRow("Teclas", "Cambiar la tecla de cada botón", this::chooseKeyboardBind));
+        }
+
         TextView lan = label("MULTIJUGADOR LAN · EXPERIMENTAL", 12, ACCENT, true);
         lan.setPadding(0, dp(14), 0, dp(2));
         optionsList.addView(lan);
@@ -577,6 +590,70 @@ public final class MainActivity extends Activity {
             optionsList.addView(optionRow("Servidor", server.isEmpty() ? "Buscar o escribir la IP" : server,
                     this::chooseLanServer));
         }
+    }
+
+    // ---- Keyboard ------------------------------------------------------------------------------------------
+
+    /** The controller's buttons and their keys (KeyboardBindings); one tapped waits for its new key. */
+    private void chooseKeyboardBind() {
+        String[] items = new String[KeyboardBindings.ALL.length];
+        for (int i = 0; i < items.length; i++) {
+            KeyboardBindings.Bind bind = KeyboardBindings.ALL[i];
+            items[i] = bind.label + ":  " + KeyboardBindings.describe(KeyboardBindings.keys(this, bind));
+        }
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Teclas")
+                .setItems(items, (dialog, which) -> captureKey(KeyboardBindings.ALL[which]))
+                .setNeutralButton("Restaurar", (dialog, which) -> {
+                    KeyboardBindings.reset(this);
+                    chooseKeyboardBind();
+                })
+                .setNegativeButton("Cerrar", null)
+                .show();
+    }
+
+    /**
+     * Waits for a key of the keyboard and gives it to the button alone. Shift, Ctrl and Alt held with it make
+     * a combination ("Shift+Up"); alone they wait for the key. The system's back and a controller's buttons
+     * work the dialog as usual.
+     */
+    private void captureKey(KeyboardBindings.Bind bind) {
+        AlertDialog dialog = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(bind.label)
+                .setMessage("Pulsa una tecla del teclado (con Shift, Ctrl o Alt para una combinación).\n\nAhora: "
+                        + KeyboardBindings.describe(KeyboardBindings.keys(this, bind)))
+                .setNegativeButton("Cancelar", null)
+                .setOnCancelListener(d -> chooseKeyboardBind())
+                .create();
+        dialog.setOnKeyListener((d, keyCode, event) -> {
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK || !KeyboardBindings.fromKeyboard(event)) {
+                return false;
+            }
+            if (event.getAction() != android.view.KeyEvent.ACTION_DOWN || event.getRepeatCount() > 0
+                    || KeyboardBindings.isModifier(keyCode)) {
+                return true;
+            }
+            String key = KeyboardBindings.bindFor(event);
+            if (key == null) {
+                android.widget.Toast.makeText(this, "Esa tecla no se puede asignar.",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return true;
+            }
+            java.util.List<String> taken = KeyboardBindings.assign(this, bind, key);
+            if (!taken.isEmpty()) {
+                android.widget.Toast.makeText(this, key + " deja de ser: " + String.join(", ", taken),
+                        android.widget.Toast.LENGTH_LONG).show();
+            }
+            d.dismiss();
+            chooseKeyboardBind();
+            return true;
+        });
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+                .setOnClickListener(v -> {
+                    dialog.dismiss();
+                    chooseKeyboardBind();
+                }));
+        dialog.show();
     }
 
     // ---- LAN multiplayer -----------------------------------------------------------------------------------

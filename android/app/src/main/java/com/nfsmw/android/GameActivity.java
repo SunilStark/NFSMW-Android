@@ -78,6 +78,8 @@ public final class GameActivity extends SDLActivity
     private String userRoot;
     private String cacheRoot;
     private TouchControlsView controls;
+    /** The keyboard plays (the launcher's TECLADO section), read as the game starts. */
+    private boolean keyboardPlay;
     private LinearLayout toolbar;
     private InputManager inputManager;
     private SensorManager sensorManager;
@@ -110,6 +112,7 @@ public final class GameActivity extends SDLActivity
             Log.w(TAG, "REX_APP_FOLDER", e);
         }
         installSettings();
+        keyboardPlay = KeyboardBindings.enabled(this);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         super.onCreate(state);
         if (mBrokenLibraries) {
@@ -273,7 +276,10 @@ public final class GameActivity extends SDLActivity
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (isGamepad(event.getDevice())) {
+        // A keyboard that plays (KeyboardBindings) hides the touch controls as a controller does; a touch
+        // brings them back.
+        if (controls != null && (isGamepad(event.getDevice()) ||
+                (keyboardPlay && KeyboardBindings.fromKeyboard(event)))) {
             controls.onGamepadActive();
         }
         return super.dispatchKeyEvent(event);

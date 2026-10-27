@@ -20,6 +20,15 @@ java -cp out/save-tests com.nfsmw.android.SaveArchiveTest
 java -cp out/save-tests com.nfsmw.android.GraphicsPresetsTest
 ```
 
+Las teclas del launcher frente al SDK (necesita el `android.jar` del SDK para compilar) y la elección de los
+núcleos rápidos en SoCs conocidos:
+
+```powershell
+javac -encoding UTF-8 -cp $env:ANDROID_HOME/platforms/android-35/android.jar -d out/keyboard-tests android/app/src/main/java/com/nfsmw/android/KeyboardBindings.java tools/tests/KeyboardBindingsTest.java
+java -cp out/keyboard-tests com.nfsmw.android.KeyboardBindingsTest
+clang++ -std=c++17 tools/tests/android_nucleos_test.cpp -o out/android_nucleos_test; out/android_nucleos_test
+```
+
 Usar el JBR/JDK 17+ del equipo para estos tests. Verificar la firma con `apksigner verify --print-certs`, el paquete,
 ABI y SDK con `aapt dump badging`, y la alineación de los segmentos ELF para páginas de 16 KB. El firmado actual usa
 la clave local de depuración: mantener el certificado es necesario para actualizar sin desinstalar. No sustituirlo

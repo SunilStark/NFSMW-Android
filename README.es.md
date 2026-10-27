@@ -65,6 +65,7 @@ Instala el nuevo APK encima del anterior, **sin desinstalar ni borrar los datos 
 - **Volumen del juego**: de Normal a Máximo.
 - **Controles táctiles:** dirección analógica o por inclinación, cruceta, A/B/X/Y, LB/RB, BACK, START, freno y acelerador. Desde el editor (engranaje) puedes moverlos, cambiar su tamaño, ocultarlos y ajustar su opacidad.
 - **Mandos Bluetooth y USB**: funcionan como jugador 1 y ocultan los controles táctiles.
+- **Teclado** (launcher **TECLADO → Jugar con teclado**): un teclado Bluetooth o USB es el mando del jugador 1 (por defecto A/D giran, E acelera, Q frena) y oculta los controles táctiles hasta el siguiente toque. **Teclas** cambia la tecla de cada botón. Android ya no recrea la pantalla del juego al conectar un mando o un teclado en plena carrera.
 - **Enviar crash o log**: genera un ZIP con el informe de tu dispositivo para compartirlo por correo o en un issue de GitHub. Adjunta el ZIP al formulario. Consulta [la guía para testers](docs/android-testers.md).
 
 ## Novedades de la v0.8.1

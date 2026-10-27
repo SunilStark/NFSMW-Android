@@ -71,6 +71,7 @@ Install the new APK over the old one, **without uninstalling it or clearing the 
 - **Game volume**: from Normal to Maximum.
 - **Touch controls:** analog or tilt steering, D-pad, A/B/X/Y, LB/RB, BACK, START, brake and throttle. In the editor (gear button) you can move, resize and hide them, and change their opacity.
 - **Bluetooth and USB gamepads** work as player 1 and hide the touch controls.
+- **Keyboard** (launcher **TECLADO → Jugar con teclado**): a Bluetooth or USB keyboard becomes player 1's controller (by default A/D steer, E accelerates, Q brakes) and hides the touch controls until the next touch. **Teclas** changes the key of each button. Android no longer recreates the game screen when a controller or keyboard connects mid-race.
 - **Enviar crash o log** (send crash or log) creates a ZIP with your device report, to share by email or in a GitHub issue. Attach the ZIP to the form. See the [tester guide](docs/android-testers.md) (in Spanish).
 
 ## What's new in v0.5.4

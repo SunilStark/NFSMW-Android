@@ -166,6 +166,8 @@ final class GameOptions {
             args.add("--nfsmw_efecto_pasada_nativo=false");
             args.add("--nfsmw_pegamento_nativo=false");
         }
+        // Playing with a keyboard (the launcher's TECLADO section): mnk_mode and the changed keys.
+        KeyboardBindings.arguments(context, args);
         GpuDrivers.arguments(context, args);
         return args;
     }

@@ -35,7 +35,7 @@
         </provider>
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation"
             android:screenOrientation="sensorLandscape"
             android:exported="true">
             <intent-filter>
@@ -46,9 +46,13 @@
         <activity android:name=".GpuProbeActivity" android:exported="false"
             android:process=":gpu_probe" android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+        <!-- SDL's activity cannot be recreated under the running game: every change SDL's own manifest
+             handles stays here, so a Bluetooth controller or keyboard connected mid-race (keyboard,
+             navigation), a cover keyboard folded away (keyboardHidden), split screen or DeX (screenLayout,
+             smallestScreenSize) and a font or language change do not restart it. -->
         <activity
             android:name=".GameActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
+            android:configChanges="layoutDirection|locale|grammaticalGender|fontScale|fontWeightAdjustment|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
         <!-- The LAN's EA lobby server when this phone hosts, in its own process so it outlives the game. -->
