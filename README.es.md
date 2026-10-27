@@ -10,6 +10,8 @@ APK nativo · Vulkan 1.1+ · controles táctiles · generación local de shaders
 
 </div>
 
+**Estado del proyecto:** Este port recibe pocas o casi ninguna actualización debido a lo que su autor denuncia como robo de código por parte de otros «devs».
+
 Este proyecto adapta a Android el trabajo de recompilación de [nfsmw-nx](https://github.com/StevensND/nfsmw-nx) y el SDK [ReXGlue](https://github.com/rexglue/rexglue-sdk). La aplicación usa código C++ recompilado, SDL3 y el renderizador nativo sobre Vulkan. No emula una Xbox 360 ni incluye los archivos del juego.
 
 La versión 0.8.2 añade la [infraestructura de compilación por edición](docs/ANDROID_EDITIONS.md), selección estricta del módulo por XEX y cachés de shaders vinculadas al ejecutable. El APK publicado sigue incluyendo **solo PAL España**; las otras regiones necesitan sus ejecutables, preparación y pruebas. Esta versión no tiene prueba en teléfono ni emulador.
@@ -79,7 +81,7 @@ Instala el nuevo APK encima del anterior, **sin desinstalar ni borrar los datos 
 - **Xclipse:** conversión conservadora de BC4/BC5 en CPU con el driver propietario de Samsung.
 - **Actualizaciones opcionales:** el launcher consulta las releases oficiales de GitHub en segundo plano y ofrece **Actualizar** o **Más tarde**. **Buscar actualizaciones** fuerza una consulta manual. Puedes jugar sin actualizar ni tener conexión.
 
-Arreglos adaptados y atribuidos al [fork de victorgbd](https://github.com/victorgbd/NFSMW-Recompiled-Mobile/commit/3d9358e13dd6a10fb4b82f64040cddd07b215362), conservando nuestro launcher. Consulta el [diagnóstico y las instrucciones de drivers](docs/compatibilidad-android-0.5.4.md). Se confirmaron la carrera y la prueba del driver del sistema en el S25 Ultra; todavía necesitamos confirmar cada combinación de Snapdragon 888/8 Gen 1, Adreno 720, Mali y Xclipse. La falta de funciones de descriptor indexing sigue siendo una limitación.
+Los arreglos de compatibilidad conservan nuestro launcher. Consulta el [diagnóstico y las instrucciones de drivers](docs/compatibilidad-android-0.5.4.md). Se confirmaron la carrera y la prueba del driver del sistema en el S25 Ultra; todavía necesitamos confirmar cada combinación de Snapdragon 888/8 Gen 1, Adreno 720, Mali y Xclipse. La falta de funciones de descriptor indexing sigue siendo una limitación.
 
 ## Novedades de la v0.3.8
 

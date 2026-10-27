@@ -10,6 +10,8 @@ Native APK · Vulkan 1.1+ · touch controls · on-device shader generation
 
 </div>
 
+**Project status:** This port receives few or almost no updates because of what its author describes as code theft by other “devs”.
+
 This project brings the [nfsmw-nx](https://github.com/StevensND/nfsmw-nx) recompilation and the [ReXGlue](https://github.com/rexglue/rexglue-sdk) SDK to Android. The app runs recompiled C++ code with SDL3 and a native Vulkan renderer. It does not emulate an Xbox 360 and does not include any game files.
 
 ## Changes in v0.8.1
@@ -79,7 +81,7 @@ Install the new APK over the old one, **without uninstalling it or clearing the 
 - **Xclipse:** conservative CPU conversion of BC4/BC5 on Samsung proprietary drivers.
 - **Optional updates:** the launcher checks official GitHub releases in the background and offers **Actualizar** or **Más tarde**. **Buscar actualizaciones** forces a manual check. Playing does not require updating or a connection.
 
-Compatibility fixes adapted with attribution from [victorgbd's fork](https://github.com/victorgbd/NFSMW-Recompiled-Mobile/commit/3d9358e13dd6a10fb4b82f64040cddd07b215362), preserving this launcher's design. See the [compatibility review and driver instructions](docs/compatibilidad-android-0.5.4.md). Gameplay and the system driver probe were confirmed on the S25 Ultra; individual Snapdragon 888/8 Gen 1, Adreno 720, Mali and Xclipse combinations still need tester confirmation. Missing descriptor-indexing features are still a limitation.
+The compatibility fixes preserve this launcher's design. See the [compatibility review and driver instructions](docs/compatibilidad-android-0.5.4.md). Gameplay and the system driver probe were confirmed on the S25 Ultra; individual Snapdragon 888/8 Gen 1, Adreno 720, Mali and Xclipse combinations still need tester confirmation. Missing descriptor-indexing features are still a limitation.
 
 ## What's new in v0.3.8
 
