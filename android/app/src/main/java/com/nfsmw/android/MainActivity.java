@@ -64,6 +64,7 @@ public final class MainActivity extends Activity {
     private Button sendReport;
     private File pendingReport;
     private boolean pendingGithub;
+    private LauncherSaves launcherSaves;
     private final ExecutorService importer = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -83,6 +84,11 @@ public final class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN |
                 View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         setContentView(buildScreen());
+        launcherSaves = new LauncherSaves(this, importer, busy -> {
+            launchGame.setEnabled(!busy);
+            selectFolder.setEnabled(!busy);
+        });
+        launcherSaves.recover();
         prepareSharedGameFolder();
         checkUpdates(false);
     }
@@ -258,6 +264,7 @@ public final class MainActivity extends Activity {
     // ---- Shader library ------------------------------------------------------------------------------------
 
     private void play() {
+        if (launcherSaves != null && launcherSaves.blocked()) return;
         if (GpuDrivers.selected(this) != null) {
             probeDriver(true);
             return;
@@ -319,6 +326,7 @@ public final class MainActivity extends Activity {
     }
 
     private void playCompatibleGame() {
+        if (launcherSaves != null && launcherSaves.blocked()) return;
         boolean xenos = "xenos".equals(GameOptions.get(this, GameOptions.RENDERER));
         if (!xenos && !ShaderBuilder.hasLibrary(sharedGameRoot())) {
             buildShaders(true, false);
@@ -538,6 +546,8 @@ public final class MainActivity extends Activity {
 
     private void refreshOptions() {
         optionsList.removeAllViews();
+        optionsList.addView(optionRow("Partidas guardadas", "Exportar, importar y respaldar", () -> launcherSaves.menu()));
+        optionsList.addView(optionRow("Perfil gráfico", profileLabel(), this::chooseProfile));
         GpuDrivers.Driver driver = GpuDrivers.selected(this);
         optionsList.addView(optionRow("Driver Vulkan", driver == null ? "Del sistema" : driver.name,
                 this::chooseDriver));
@@ -742,6 +752,55 @@ public final class MainActivity extends Activity {
         } catch (Exception error) { playAfterProbe = false; reportError("Diagnóstico no válido: " + error.getMessage()); }
     }
 
+    private java.util.Map<String,String> profileValues(String prefix) {
+        java.util.Map<String,String> values = new java.util.LinkedHashMap<>();
+        for (String key : GraphicsPresets.KEYS) values.put(key, prefix.isEmpty() ? GameOptions.get(this, key)
+                : GameOptions.prefs(this).getString(prefix + key, ""));
+        return values;
+    }
+
+    private String profileLabel() {
+        SharedPreferences prefs = GameOptions.prefs(this);
+        return profileValues("").equals(profileValues("preset_applied_")) ? prefs.getString("preset_name", "Personalizado") : "Personalizado";
+    }
+
+    private void chooseProfile() {
+        boolean saved = GameOptions.prefs(this).getBoolean("preset_has_backup", false);
+        String[] names = saved ? new String[]{"Batería", "Equilibrado", "Rendimiento", "Calidad", "Mis ajustes guardados"}
+                : GraphicsPresets.NAMES;
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("Perfil gráfico")
+                .setItems(names, (dialog, which) -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle(names[which]).setMessage(which == 4 ? "Se recuperarán tus seis ajustes gráficos guardados."
+                                : "Se ajustarán resolución, FPS, antialiasing, sombras y reflejos. Se guardarán tus valores personales para recuperarlos. El resultado depende del dispositivo; no hay mediciones de ahorro ni FPS para este perfil.")
+                        .setPositiveButton("Aplicar al próximo inicio", (confirm, button) -> applyProfile(which))
+                        .setNegativeButton("Cancelar", null).show())
+                .setNegativeButton("Cerrar", null).show();
+    }
+
+    private void applyProfile(int profile) {
+        SharedPreferences prefs = GameOptions.prefs(this);
+        java.util.Map<String,String> next = profile == 4 ? profileValues("preset_backup_") : GraphicsPresets.values(profile);
+        // Validate against the launcher's actual options before changing any preference.
+        for (java.util.Map.Entry<String,String> entry : next.entrySet()) {
+            if (!java.util.Arrays.asList(GameOptions.find(entry.getKey()).values).contains(entry.getValue())) {
+                reportError("Los ajustes guardados no corresponden a esta versión."); return;
+            }
+        }
+        SharedPreferences.Editor edit = prefs.edit();
+        if (profile != 4) {
+            java.util.Map<String,String> previous = prefs.getBoolean("preset_has_backup", false) ? profileValues("preset_backup_") : null;
+            java.util.Map<String,String> backup = GraphicsPresets.preserve(profileValues(""), profileValues("preset_applied_"), previous);
+            for (java.util.Map.Entry<String,String> entry : backup.entrySet()) edit.putString("preset_backup_" + entry.getKey(), entry.getValue());
+            edit.putBoolean("preset_has_backup", true).putString("preset_name", GraphicsPresets.NAMES[profile]);
+        } else edit.putString("preset_name", "Personalizado");
+        for (java.util.Map.Entry<String,String> entry : next.entrySet()) {
+            edit.putString(entry.getKey(), entry.getValue());
+            edit.putString("preset_applied_" + entry.getKey(), entry.getValue());
+        }
+        if (!edit.commit()) reportError("No se pudieron guardar los ajustes.");
+        refreshOptions();
+    }
+
     private void chooseOption(GameOptions.Option option) {
         String current = GameOptions.get(this, option.key);
         int checked = 0;
@@ -865,6 +924,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (launcherSaves != null && launcherSaves.result(requestCode, resultCode, data)) return;
         if (requestCode == REQUEST_DRIVER_PROBE) {
             launchGame.setEnabled(true);
             showDriverReport(resultCode == RESULT_OK && data != null ? data.getStringExtra("gpu_report")

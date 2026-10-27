@@ -65,5 +65,10 @@ repository.
 
 ## Trademarks
 
+The saved-game ZIP workflow and reversible graphics presets introduced in 0.8.1 are inspired by `Partidas.java`
+and the “Mis ajustes” feature in [victorgbd/NFSMW-Recompiled-Mobile](https://github.com/victorgbd/NFSMW-Recompiled-Mobile)
+at `dd76acb032ccbd7b0494985242489cd9cd90a939` (GPL-3.0). Our archive implementation adds a strict allowlist,
+SHA-256 verification and recoverable directory swaps; it does not copy the fork's launcher or package identity.
+
 Need for Speed and Need for Speed: Most Wanted are trademarks of Electronic Arts Inc. Nintendo Switch is a trademark of
 Nintendo. Xbox 360 is a trademark of Microsoft. This project is not affiliated with or endorsed by any of them.

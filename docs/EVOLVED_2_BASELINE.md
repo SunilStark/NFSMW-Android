@@ -1,5 +1,10 @@
 # Baseline de Evolved 2
 
+**Reanudación del 27 de octubre:** el usuario incorporó cambios adicionales en `0119f7e` y publicó 0.8.0.
+La nueva rama `evolved-2/saves-and-profiles-20261027` parte de ese commit. Su build Release pasó antes de editar.
+El build nuevo 0.8.1 también pasó. No hay dispositivo o emulador disponible en esta reanudación; las pruebas físicas
+del texto histórico de abajo no prueban las funciones nuevas. Logs actuales en `out/evolved2/0.8.1/`.
+
 Inicio: 26 de octubre de 2026. Commit propio `026f7d07b57dcb1969349b220b945c8e24ca6a0a`; última versión 0.6.0,
 `versionCode=13`. El tag 0.6.0 apunta a `507a63f7d21c9b8e2d6f15d3ed0e12b9b2c38712`; el commit posterior añade
 el manifiesto de recomp.fyi. La copia extraída coincidía con Git tras recuperar el historial. Rama de trabajo:
@@ -28,8 +33,10 @@ como cabeceras enlaces de directorio de MoltenVK y enlaces a sus dependencias Ap
 Se distinguen esos enlaces de las cabeceras reales y se añade caché de checkout y submódulos superficiales fijados para no repetir
 la descarga completa. El código generado debe reconstruirse desde el XEX propio con las herramientas de este SDK.
 
-**Estado de build base:** reconstrucción en curso; no se autoriza interpretar el APK preexistente como build nuevo.
-Antes de una integración grande del motor se debe cerrar esta referencia de compilación.
+**Resultado posterior de la preparación:** se construyó el generador local y se generaron 265 archivos desde el XEX
+en 227,3 segundos. Se documentaron avisos de destino no resuelto en el log. El usuario cerró después la integración
+0.8.0; esa es la referencia de compilación utilizada en la entrega actual. El APK preexistente no se interpreta
+como un build nuevo.
 
 ## Prueba física inicial
 

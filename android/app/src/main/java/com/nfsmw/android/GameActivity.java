@@ -50,6 +50,7 @@ import java.util.List;
 
 public final class GameActivity extends SDLActivity
         implements TouchControlsView.Host, InputManager.InputDeviceListener, SensorEventListener {
+    static volatile boolean gameRunning;
     private static final String TAG = "NFSMW";
     private static final String SETTINGS = "nfsmw.toml";
     static final String EXTRA_LAN_SERVER = "lan_server";
@@ -67,6 +68,7 @@ public final class GameActivity extends SDLActivity
 
     @Override
     protected void onCreate(Bundle state) {
+        gameRunning = true;
         File appRoot = new File(getFilesDir(), "nfsmw");
         gameRoot = new File(Environment.getExternalStorageDirectory(), MainActivity.GAME_FOLDER_NAME).getAbsolutePath();
         userRoot = new File(appRoot, "user").getAbsolutePath();
@@ -105,6 +107,10 @@ public final class GameActivity extends SDLActivity
                 gravity = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             }
         }
+    }
+
+    @Override protected void onDestroy() {
+        try { super.onDestroy(); } finally { gameRunning = false; }
     }
 
     // SDL picks an orientation from the window size when it creates its window; the game is landscape only.

@@ -15,13 +15,13 @@ Este proyecto adapta a Android el trabajo de recompilación de [nfsmw-nx](https:
 ## Requisitos
 
 - Android 8 o posterior y procesador ARM64 (ARMv8.0 o posterior).
-- GPU con **Vulkan 1.1 o posterior** y las funciones necesarias de *descriptor indexing*: expuestas mediante Vulkan 1.2 o la extensión `VK_EXT_descriptor_indexing` en controladores 1.1. Una versión reciente de Vulkan no garantiza esas funciones opcionales. Desde la v0.3.7 ya no hacen falta `shaderInt64` ni *buffer device address*. El launcher comprueba tu GPU antes de jugar.
+- GPU con **Vulkan 1.1 o posterior** y las funciones necesarias de *descriptor indexing*, o la ruta **OpenGL ES 3.2 experimental** incorporada en 0.8.0. Vulkan expone esas funciones mediante Vulkan 1.2 o `VK_EXT_descriptor_indexing` en 1.1; una versión reciente no las garantiza. No hacen falta `shaderInt64` ni *buffer device address* en la ruta nativa. La compatibilidad de GLES requiere pruebas por dispositivo.
 - Una copia propia de **Need for Speed: Most Wanted (2005), Xbox 360, edición PAL España**, extraída y con `default.xex`, `NFS/` y `Movies/`. Este APK se compila para el ejecutable de esa edición; con otra edición el juego se cierra al arrancar y el launcher te avisa. Los archivos de la versión de PC, PS2 o una ISO sin extraer no sirven.
 - Espacio en la memoria interna para el APK, la carpeta del juego y los archivos generados.
 
 Probado en un **Samsung Galaxy S25 Ultra** (Adreno 830), un **Galaxy A55** (Xclipse 530) y varios Mali (G57, G615, G68, G720) según los informes de los testers.
 
-**Todavía no funcionan** las GPU sin *descriptor indexing* ni siquiera con controladores modernos: Mali-G52/G72/G76 (Bifrost), Adreno 610 y PowerVR GE8320. El renderizador necesita otra gestión de texturas para ellas.
+Las GPU cuyos drivers no ofrecen *descriptor indexing* no pueden usar la ruta nativa Vulkan. Desde 0.8.0 pueden intentar **API gráfica → OpenGL ES**, con su biblioteca de shaders separada. Esto no confirma compatibilidad con todas las Mali, Adreno o PowerVR.
 
 ## Instalación y primer inicio
 
@@ -62,6 +62,12 @@ Instala el nuevo APK encima del anterior, **sin desinstalar ni borrar los datos 
 - **Controles táctiles:** dirección analógica o por inclinación, cruceta, A/B/X/Y, LB/RB, BACK, START, freno y acelerador. Desde el editor (engranaje) puedes moverlos, cambiar su tamaño, ocultarlos y ajustar su opacidad.
 - **Mandos Bluetooth y USB**: funcionan como jugador 1 y ocultan los controles táctiles.
 - **Enviar crash o log**: genera un ZIP con el informe de tu dispositivo para compartirlo por correo o en un issue de GitHub. Adjunta el ZIP al formulario. Consulta [la guía para testers](docs/android-testers.md).
+
+## Novedades de la v0.8.1
+
+- **Partidas guardadas:** exportar ZIP, importar, crear un respaldo privado y restaurar el último. Verifica SHA-256 y CRC, respalda antes de importar y recupera operaciones interrumpidas. Conserva ajustes, shaders y cachés. Acepta únicamente ZIPs creados por esta función; exporta una copia externa antes de desinstalar.
+- **Perfil gráfico:** Batería, Equilibrado, Rendimiento y Calidad, con **Mis ajustes guardados** para volver a los valores personales. Encadenar perfiles no pisa ese respaldo. Son conjuntos de opciones, sin mejoras de FPS o consumo medidas.
+- Basada en tus cambios de 0.8.0: **GLES, LAN experimental y opciones de compatibilidad** permanecen integrados. Esta entrega pasa compilación y pruebas de archivos/preajustes; no hay nueva prueba física ni en emulador. Consulta [implementación](docs/EVOLVED_2_IMPLEMENTATION.md) y [resultados](docs/EVOLVED_2_TEST_RESULTS.md).
 
 ## Novedades de la v0.5.4
 

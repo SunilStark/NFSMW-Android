@@ -1,5 +1,10 @@
 # Comparación técnica Evolved 2
 
+**Estado actualizado (27 de octubre):** la matriz siguiente documenta la selección inicial antes de 0.8.0.
+El usuario ya incorporó GLES, cachés, opciones gráficas y LAN en `0119f7e`. La entrega 0.8.1 añade gestión de partidas
+y preajustes reversibles. El estado vigente y las pruebas están en [EVOLVED_2_IMPLEMENTATION.md](EVOLVED_2_IMPLEMENTATION.md)
+y [EVOLVED_2_TEST_RESULTS.md](EVOLVED_2_TEST_RESULTS.md); los estados «pendiente» de la matriz inicial son históricos.
+
 Auditoría iniciada el 26 de octubre de 2026. Base propia: `026f7d07b57dcb1969349b220b945c8e24ca6a0a`
 (0.6.0). Referencia: `dd76acb032ccbd7b0494985242489cd9cd90a939`. No se compara contra una release supuesta.
 La copia local coincidía con el árbol oficial; se recuperó su historial sin reemplazar los archivos y se creó

@@ -12,16 +12,22 @@ Native APK · Vulkan 1.1+ · touch controls · on-device shader generation
 
 This project brings the [nfsmw-nx](https://github.com/StevensND/nfsmw-nx) recompilation and the [ReXGlue](https://github.com/rexglue/rexglue-sdk) SDK to Android. The app runs recompiled C++ code with SDL3 and a native Vulkan renderer. It does not emulate an Xbox 360 and does not include any game files.
 
+## Changes in v0.8.1
+
+- **Saved games:** export/import ZIPs, create private backups and restore the latest. SHA-256/CRC validation, a backup before replacement and recovery of interrupted imports preserve the existing settings and resources. Only this feature's ZIP format is accepted. Export an external copy before uninstalling.
+- **Graphics presets:** Battery, Balanced, Performance and Quality, with personal settings that survive consecutive presets. These are option bundles, without measured FPS or battery gains.
+- Builds on the owner's 0.8.0 GLES, experimental LAN and compatibility work. Release compilation and file/preset tests pass; this delivery has no physical-device or emulator validation. See [implementation](docs/EVOLVED_2_IMPLEMENTATION.md) and [test results](docs/EVOLVED_2_TEST_RESULTS.md).
+
 ## Requirements
 
 - Android 8 or later on an ARM64 processor (ARMv8.0 or later).
-- A GPU with **Vulkan 1.1 or later** and the required *descriptor indexing* features: exposed through Vulkan 1.2 or `VK_EXT_descriptor_indexing` on 1.1 drivers. A recent Vulkan version alone does not guarantee these optional features. Since v0.3.7, `shaderInt64` and *buffer device address* are no longer needed. The launcher checks your GPU before you play.
+- A GPU with **Vulkan 1.1 or later** and the required *descriptor indexing* features, or the **experimental OpenGL ES 3.2 path** introduced in 0.8.0. Vulkan exposes those features through Vulkan 1.2 or `VK_EXT_descriptor_indexing` in 1.1; a recent version alone does not guarantee them. The native path does not need `shaderInt64` or buffer device address. GLES compatibility still requires device-specific testing.
 - Your own copy of **Need for Speed: Most Wanted (2005), Xbox 360, PAL Spain edition**, extracted, with `default.xex`, `NFS/` and `Movies/`. This APK is built for that edition's executable. With another edition the game closes at startup, and the launcher warns you. Files from the PC or PS2 versions, or an unextracted ISO, will not work.
 - Enough internal storage for the APK, the game folder and the generated files.
 
 Tested on a **Samsung Galaxy S25 Ultra** (Adreno 830) and a **Galaxy A55** (Xclipse 530). Tester reports also cover several Mali GPUs (G57, G615, G68, G720).
 
-**Not supported yet:** GPUs without *descriptor indexing*, even on recent drivers. This includes Mali-G52/G72/G76 (Bifrost), Adreno 610 and PowerVR GE8320. The renderer needs a different way of managing textures for them.
+Drivers without *descriptor indexing* cannot use native Vulkan. Since 0.8.0 you can try **API gráfica → OpenGL ES**, using its separate shader library. This does not confirm support for every Mali, Adreno or PowerVR device.
 
 ## Installation and first launch
 
