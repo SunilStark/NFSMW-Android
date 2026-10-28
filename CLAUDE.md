@@ -291,6 +291,13 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
   Arm Performance Studio; its installer failed with 1603 on this PC, retry with a `/l*v` log) on
   `out/tablet/spirv/ps_*.spv` for cycles per fragment, times the fragment counts, then work on the costliest
   shaders. The road reflection (**Wet road reflection → Off**) would save ~1.2-1.7 ms.
+- malioc done (Arm Performance Studio 2026.5 installed; its MSI needs `EULA=1`, which the owner accepted in its own
+  window): `out/tablet/malioc/ps_NNN.txt`. Fragments times the longest-path cycles, over the Mali-G68's 5 cores at
+  949 MHz, comes to only ~2 ms of the scene's 12.7-14.4 ms, so the shaders' arithmetic is not where the scene's time
+  goes. Most are varying-bound (PS n108: A 0.38, V 1.38, T 0.25 cycles), so 16-bit varyings would save part of that
+  ~2 ms at most. The rest (~11 ms) is vertices, tiling, memory traffic or per-draw cost: measure with Streamline's
+  hardware counters next. The tablet has no Perfetto GPU counters (`perfetto --query`: only `android.gpu.memory`),
+  and it is not rooted (`ro.debuggable=0`), so Streamline needs a debuggable `.dev` build.
 
 1. **Confirm the two changes above on the tablet**: the core log line, keyboard play and remapping, controller and
    keyboard connected mid-race. Build and install the `.dev` APK, then run
