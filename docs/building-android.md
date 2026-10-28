@@ -111,6 +111,9 @@ clang++ -std=c++17 tools/tests/android_nucleos_test.cpp -o out/android_nucleos_t
 # BC to ETC2/EAC: every block decodes to the encoder's own error, every mode is used, quality and speed
 clang++ -std=c++20 -O2 tools/tests/texturas_etc_test.cpp -o out/texturas_etc_test.exe; out/texturas_etc_test.exe
 
+# the sizes the game draws at on screens that are not 16:9 (16:10 tablets, 20:9 phones)
+clang++ -std=c++17 tools/tests/tamano_pantalla_test.cpp -o out/tamano_pantalla_test.exe; out/tamano_pantalla_test.exe
+
 # the thermal step-down's levels and ADPF's frame work
 clang++ -std=c++17 tools/tests/android_termico_test.cpp -o out/android_termico_test.exe; out/android_termico_test.exe
 

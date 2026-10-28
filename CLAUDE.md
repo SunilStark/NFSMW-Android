@@ -152,6 +152,12 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
   ahead) every 2 s and sets a floor under the 30 FPS guard's shadow steps (0.85: one map, 0.95: no cast shadows;
   back one level per minute under 0.70; policy in `android_termico.h`). Loaded with dlsym (minSdk 26). Launcher:
   **Control térmico**, **Ayuda al sistema (ADPF)**, **Núcleos del juego**. Policy tested off-device; not on the tablet.
+- `android: 16:10 internal sizes and the narrower screen proportion` (step 5 below): `nfsmw_proporcion_pantalla`
+  below 16:9 draws narrower at the same height, and `nfsmw_resolucion_interna` gains 1056x660 and 1280x800, both
+  16:10 whatever the proportion (sizes in `app/src/nfsmw_tamano_pantalla.h`). The camera is left alone when
+  narrower: the game's projection already shows more above and below (Vert+); the presenters show that front
+  buffer at its own proportion. Launcher: the two sizes and **Proporción de imagen → La de la pantalla**. Sizes
+  tested off-device; not on the tablet.
 
 ## Next, in order (each measured on the tablet before and after)
 
@@ -203,9 +209,17 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
      is as good, it is the better default (it adapts to other SoCs).
    - The thresholds are cvars (`nfsmw_android_termico_nivel1_pct` 85, `_nivel2_pct` 95, `_volver_pct` 70,
      `_volver_s` 60): if the tablet throttles before level 1 kicks in, lower `nivel1`.
-5. **16:10**: the tablet is 2112x1320. `nfsmw_proporcion_pantalla` (`app/src/nfsmw_render_targets.cpp`,
-   `nfsmw_panoramico.cpp`) only widens past 16:9 (Hor+); add the narrower case (Vert+) and internal sizes such as
-   1056x660 (exactly half the screen) and 1280x800, to replace the launcher's stretch or bars.
+5. **Check 16:10 on the tablet** (done in code, see "Done"): launcher **Resolución interna → 1056x660** (or
+   1280x800, or **Proporción de imagen → La de la pantalla** with 1024x576/1280x720: 928x576 and 1152x720).
+   - The log: `[resolucion] modo 4 preparado a 1056x672 (area visible 1056x660): el panoramico`, `salida del juego
+     al arrancar: 1056x660, impuesta`, `[panoramico] vista 1: destino 1056x672, mas estrecho que 16:9: ... se deja
+     como esta` (no `k` line: the camera is not corrected).
+   - On screen: the image fills the 16:10 screen with no bars and no 3D stretch (round wheels, the speedometer's
+     circle may be stretched: the HUD is laid out for the screen size, a prototype as in the wide mode); more road
+     and sky visible than at 16:9; shadows that match the objects (the shadow fit uses the same projection);
+     bloom, motion blur, the road reflection and the rear-view mirror in place; menus and the map usable.
+   - Measure 1056x660 against 1024x576 and 1280x720 at 16:9 on the same route (FPS, 95th/99th percentile, GPU
+     temperature): 1056x660 is 18 % more pixels than 1024x576 and a clean 2x scale to the screen.
 6. **45 FPS** for the 90 Hz display (half its rate) where 60 does not hold: `nfsmw_limite_fps` allows 30/60/90/120.
 7. **Game data in the app's own folder** (`getExternalFilesDir`): no shared-storage overhead while the track
    streams, and no All files access. `MainActivity.GAME_FOLDER_NAME` and `GameActivity` hold the path.

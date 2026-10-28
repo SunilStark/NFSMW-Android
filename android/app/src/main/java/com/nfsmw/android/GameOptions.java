@@ -2,9 +2,13 @@ package com.nfsmw.android;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.hardware.display.DisplayManager;
+import android.util.DisplayMetrics;
+import android.view.Display;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The graphics options of the launcher. Each one is a game cvar: GameActivity passes them on the command
@@ -43,6 +47,9 @@ final class GameOptions {
     static final String FPS = "fps";
     static final String RENDERER = "renderer";
     static final String API = "graphics_api";
+    static final String ASPECT = "aspect";
+    /** The ASPECT value that GameActivity turns into the screen's own proportion. */
+    static final String SCREEN_ASPECT = "pantalla";
 
     static final Option[] ALL = {
             new Option(RENDERER, "Renderizador", "nfsmw_renderizador", "nativo",
@@ -80,10 +87,18 @@ final class GameOptions {
             new Option("big_cores", "Núcleos del juego", "nfsmw_android_nucleos_grandes", "true",
                     new String[] {"true", "false"},
                     new String[] {"Solo los rápidos", "Los que decida Android"}),
+            // 1056x660 and 1280x800 are 16:10 (nfsmw_tamano_pantalla.h): the game draws at that proportion. 1056x660
+            // is exactly half of a 2112x1320 tablet screen.
             new Option(RESOLUTION, "Resolución interna", "nfsmw_resolucion_interna", "1280x720",
-                    new String[] {"640x360", "1024x576", "1280x720", "1920x1080"},
+                    new String[] {"640x360", "1024x576", "1280x720", "1920x1080", "1056x660", "1280x800"},
                     new String[] {"640x360 · máximo rendimiento", "1024x576 · rendimiento", "1280x720 · equilibrado",
-                            "1920x1080 · máxima calidad"}),
+                            "1920x1080 · máxima calidad", "1056x660 · tabletas 16:10, la mitad de la pantalla",
+                            "1280x800 · tabletas 16:10"}),
+            // nfsmw_proporcion_pantalla: 16:9 as on the Xbox 360, or the screen's own, measured when the game starts.
+            // Wider screens see more at the sides, narrower ones (16:10) more above and below. HUD stretched.
+            new Option(ASPECT, "Proporción de imagen", "nfsmw_proporcion_pantalla", "0",
+                    new String[] {"0", SCREEN_ASPECT},
+                    new String[] {"16:9 · como la Xbox 360", "La de la pantalla · sin barras ni deformar (prototipo)"}),
             new Option(FPS, "Límite de FPS", "nfsmw_limite_fps", "60",
                     new String[] {"30", "60", "90", "120"},
                     new String[] {"30 FPS · ahorra batería", "60 FPS", "90 FPS · experimental",
@@ -166,7 +181,11 @@ final class GameOptions {
             if (o.key.equals(API) && !"nativo".equals(get(context, RENDERER))) {
                 continue;  // the Xenos renderer is Vulkan only
             }
-            args.add("--" + o.cvar + "=" + get(context, o.key));
+            String value = get(context, o.key);
+            if (o.key.equals(ASPECT) && SCREEN_ASPECT.equals(value)) {
+                value = screenAspect(context);
+            }
+            args.add("--" + o.cvar + "=" + value);
         }
         if ("xenos".equals(get(context, RENDERER))) {
             // Use ordinary descriptor sets and host framebuffers on older drivers.
@@ -193,5 +212,20 @@ final class GameOptions {
         KeyboardBindings.arguments(context, args);
         GpuDrivers.arguments(context, args);
         return args;
+    }
+
+    /** The screen's long side over its short one, for nfsmw_proporcion_pantalla (the game plays in landscape). */
+    static String screenAspect(Context context) {
+        DisplayMetrics metrics = new DisplayMetrics();
+        DisplayManager displays = context.getSystemService(DisplayManager.class);
+        Display display = displays != null ? displays.getDisplay(Display.DEFAULT_DISPLAY) : null;
+        if (display != null) {
+            display.getRealMetrics(metrics);
+        } else {
+            metrics = context.getResources().getDisplayMetrics();
+        }
+        int longSide = Math.max(metrics.widthPixels, metrics.heightPixels);
+        int shortSide = Math.min(metrics.widthPixels, metrics.heightPixels);
+        return shortSide > 0 ? String.format(Locale.ROOT, "%.4f", (double) longSide / shortSide) : "0";
     }
 }

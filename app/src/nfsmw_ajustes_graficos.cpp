@@ -33,8 +33,10 @@ REXCVAR_DEFINE_STRING(nfsmw_resolucion_interna, kResolucionInternaPredeterminada
                       "que DIBUJA el juego -sigue en 1280x720- sino solo el tamano al que se encoge al resolver. "
                       "Lo que ahorra es el posproceso, las copias y el cubo; la escena no se mueve. De 1280x720 a "
                       "1024x576 son 2,14 ms reales y el posproceso ya baja a 0,03, asi que por debajo queda poco "
-                      "que rascar y el escalado si se ve")
-    .allowed({"automatico", "1280x720", "1920x1080", "1024x576", "640x360", "640x480"});
+                      "que rascar y el escalado si se ve. 1056x660 y 1280x800 son de 16:10 (tabletas): el juego "
+                      "dibuja a esa proporcion y ve mas arriba y abajo; 1056x660 es la mitad exacta de una pantalla "
+                      "de 2112x1320")
+    .allowed({"automatico", "1280x720", "1920x1080", "1024x576", "640x360", "640x480", "1056x660", "1280x800"});
 
 /*
  * GPU MHz in handheld mode.

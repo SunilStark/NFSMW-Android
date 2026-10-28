@@ -660,6 +660,11 @@ void Latir(double ms);
 void Informe();
 }  // namespace nfsmw::guardia30
 
+// The front buffer's proportion for the presenter (nfsmw_render_targets.cpp).
+namespace nfsmw::render_targets {
+bool ProporcionPropia(uint32_t ancho, uint32_t alto);
+}  // namespace nfsmw::render_targets
+
 namespace nfsmw::nativo {
 namespace shaders {
 // The same SPIR-V the SDK presenter uses to draw the game image
@@ -2223,10 +2228,11 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     auto entrada_llamada = antes_refresco;
     auto salida_llamada = antes_refresco;
     bool llamada = false;
-    // The display proportion: 16:9, or the front buffer's own when it is wider (nfsmw_proporcion_pantalla).
-    const bool mas_ancha = uint64_t(w) * 9 > uint64_t(h) * 16 + h;
+    // The display proportion: 16:9, or the front buffer's own when it is wider, or the non-16:9 one the game
+    // draws at (nfsmw_proporcion_pantalla, the 16:10 internal sizes).
+    const bool propia = nfsmw::render_targets::ProporcionPropia(w, h);
     presentador->RefreshGuestOutput(
-        w, h, mas_ancha ? w : 1280, mas_ancha ? h : 720,
+        w, h, propia ? w : 1280, propia ? h : 720,
         [&](rex::ui::Presenter::GuestOutputRefreshContext& base_contexto) {
           entrada_llamada = std::chrono::steady_clock::now();
           llamada = true;

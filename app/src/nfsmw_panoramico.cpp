@@ -26,6 +26,11 @@
 //                                       proportion: v = atan(1 / |[1][1]|), v * k)
 //      H / k                            the same LOD and culling distances as at 16:9
 //  The rest of the frame (HUD, menus, post-processing) is not touched here: prototype.
+//
+//  Narrower than 16:9 (k < 1, a 16:10 tablet) nothing is changed: the horizontal angle above only depends on
+//  the fov and the vertical one grows with height / width, so the game already shows the same sides and more
+//  above and below (Vert+), with square pixels (tan of the vertical half-angle over tan of the horizontal one is
+//  0.627 for a 0.625 target at the game's fov). Correcting it here would narrow the sides.
 // ===========================================================================
 
 #include <algorithm>
@@ -113,6 +118,14 @@ double Corregir(uint8_t* base, uint32_t vista, uint32_t proyeccion, const char* 
     return 1.0;
   }
   const double k = nfsmw::render_targets::FactorPanoramico();
+  if (k <= 1.0) {
+    if (PrimeraVez(id)) {
+      REXLOG_INFO("[panoramico] vista {}: destino {}x{}, mas estrecho que 16:9: la proyeccion del juego ya ve mas "
+                  "arriba y abajo, se deja como esta",
+                  id, ancho, alto);
+    }
+    return 1.0;
+  }
   const float sx = LeerFloat(base, proyeccion + 0);
   const float sy = LeerFloat(base, proyeccion + 20);
   if (!(sx > 0.0f) || sy == 0.0f || !std::isfinite(sx) || !std::isfinite(sy)) {

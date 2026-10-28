@@ -50,6 +50,11 @@ REXCVAR_DECLARE(int32_t, nfsmw_nativo_lecturas_cada);
 
 REXCVAR_DECLARE(bool, nfsmw_nativo_gles_etapas);
 
+// The front buffer's proportion for the presenter (nfsmw_render_targets.cpp).
+namespace nfsmw::render_targets {
+bool ProporcionPropia(uint32_t ancho, uint32_t alto);
+}  // namespace nfsmw::render_targets
+
 namespace nfsmw::nativo {
 namespace {
 
@@ -409,10 +414,11 @@ class DestinosGles final : public DestinosNativos, public ContextoDestinosGles {
     ResueltaGles& resuelta = it->second;
     const uint32_t w = std::min(ancho ? ancho : resuelta.imagen.ancho, resuelta.imagen.ancho);
     const uint32_t h = std::min(alto ? alto : resuelta.imagen.alto, resuelta.imagen.alto);
-    // The display proportion: 16:9, or the front buffer's own when it is wider (nfsmw_proporcion_pantalla).
-    const bool mas_ancha = uint64_t(w) * 9 > uint64_t(h) * 16 + h;
+    // The display proportion: 16:9, or the front buffer's own when it is wider, or the non-16:9 one the game
+    // draws at (nfsmw_proporcion_pantalla, the 16:10 internal sizes).
+    const bool propia = nfsmw::render_targets::ProporcionPropia(w, h);
     bool pintado = false;
-    presentador->RefreshGuestOutput(w, h, mas_ancha ? w : 1280, mas_ancha ? h : 720,
+    presentador->RefreshGuestOutput(w, h, propia ? w : 1280, propia ? h : 720,
                                     [&](rex::ui::Presenter::GuestOutputRefreshContext& base_contexto) {
                                       auto& contexto =
                                           static_cast<GlesPresenter::GlesGuestOutputRefreshContext&>(base_contexto);

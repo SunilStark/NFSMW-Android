@@ -5,6 +5,10 @@ Changes in this copy, newest first. Upstream's own history is in
 
 ## Unreleased
 
+- **16:10.** Internal resolutions 1056x660 (exactly half of the tablet's 2112x1320) and 1280x800, and **Proporción
+  de imagen → La de la pantalla** for any screen: the game draws at the screen's proportion with no bars and no
+  stretched 3D. Narrower than 16:9 it shows more above and below (the game's own projection); wider, more at the
+  sides (as before). The HUD is still stretched (prototype). Not yet run on the tablet.
 - **ADPF and thermal step-down** (Android 13+ and 12+). The game's three hot threads report each frame's work to
   Android against the frame budget, so it can set the clocks for it. Before the tablet throttles, the shadows step
   down (one map, then no cast shadows) and come back once it has cooled. Launcher: **Control térmico**, **Ayuda al

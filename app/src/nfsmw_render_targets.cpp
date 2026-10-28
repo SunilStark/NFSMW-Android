@@ -76,6 +76,8 @@
 #include <rex/logging.h>
 #include <rex/platform.h>
 
+#include "nfsmw_tamano_pantalla.h"
+
 REXCVAR_DEFINE_BOOL(nfsmw_render_sin_mosaico, REX_PLATFORM_SWITCH != 0, "NFSMW",
                     "Dibujar la escena una sola vez, sin tiling de 3 tiras ni MSAA "
                     "(evita repetir la escena por tira bajo la emulacion de Xenos)")
@@ -111,13 +113,16 @@ REXCVAR_DEFINE_BOOL(nfsmw_render_prueba_mantener_msaa, false, "NFSMW",
 // do not go up, so 1080p there costs a third of the FPS; that is a deliberate choice.
 REXCVAR_DECLARE(std::string, nfsmw_resolucion_interna);
 
-// Wider than 16:9 (nfsmw_panoramico.cpp has the camera). The big mode set below (mode 4) and the four screen
-// size globals get the screen's width at the same height, and the game draws everything at that size: the
-// same path as the 1080p mode, with another width.
+// Not 16:9 (nfsmw_tamano_pantalla.h has the sizes, nfsmw_panoramico.cpp the camera). The big mode set below (mode
+// 4) and the four screen size globals get the screen's width at the same height, and the game draws everything at
+// that size: the same path as the 1080p mode, with another width. Wider: the camera widens (Hor+). Narrower (16:10):
+// the game's own projection shows more above and below (Vert+). The 16:10 internal sizes (1056x660, 1280x800) take
+// this path whatever the proportion.
 REXCVAR_DEFINE_DOUBLE(nfsmw_proporcion_pantalla, 0.0, "Graficos",
-                      "Ancho entre alto de la pantalla (2.21 en un movil de 20:9) para dibujar el juego a esa "
-                      "proporcion, sin barras ni deformar: la camara ve mas por los lados (Hor+). 0 o 16:9 = como "
-                      "la Xbox 360. Hasta 2.4. Prototipo: el HUD y los menus se estiran")
+                      "Ancho entre alto de la pantalla (2.21 en un movil de 20:9, 1.6 en una tableta de 16:10) para "
+                      "dibujar el juego a esa proporcion, sin barras ni deformar: mas ancha, la camara ve mas por los "
+                      "lados (Hor+); mas estrecha, ve lo mismo a los lados y mas arriba y abajo (Vert+). 0 o 16:9 = "
+                      "como la Xbox 360. De 1.33 a 2.4. Prototipo: el HUD y los menus se estiran")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 #if REX_PLATFORM_SWITCH
@@ -151,26 +156,21 @@ constexpr uint32_t kGlobalModoSalida = 0x82A2CF80;
 constexpr uint32_t kModoSalida1080p = 3;  // su tabla: 0 -> 640x480, 2 -> 1280x720, 3 -> 1920x1080
 
 // Mode 4 at its size: 1920x1080, or with nfsmw_proporcion_pantalla the screen's proportion at the height of
-// nfsmw_resolucion_interna (1600x720 on a 20:9 phone). The width is a multiple of 32, like the game's pitches.
-constexpr double kProporcionMinima = 16.0 / 9.0 + 0.02;  // below it, 16:9: not worth it
-constexpr double kProporcionMaxima = 2.4;
+// nfsmw_resolucion_interna (1600x720 on a 20:9 phone, 1152x720 on a 16:10 tablet), or a 16:10 internal size
+// (nfsmw_tamano_pantalla.h).
 struct TamanoGrande {
   uint32_t ancho;        // set width and visible width
   uint32_t alto;         // set height: the visible one rounded up to 32, like its own 720 -> 736
   uint32_t visible;      // visible height
   uint32_t modo_salida;  // for 0x82A2CF80; 0 = the game's own (720p)
-  bool panoramico;
+  bool panoramico;       // not 16:9 (wider or narrower)
 };
+static_assert(kAncho1080p == 1920 && kAlto1080p == 1088 && kVisible1080p == 1080 && kModoSalida1080p == 3,
+              "nfsmw_tamano_pantalla.h gives the same 1080p mode");
 TamanoGrande CalcularGrande() {
-  const double proporcion = REXCVAR_GET(nfsmw_proporcion_pantalla);
-  if (!(proporcion > kProporcionMinima)) {
-    return {kAncho1080p, kAlto1080p, kVisible1080p, kModoSalida1080p, false};
-  }
-  const std::string r = REXCVAR_GET(nfsmw_resolucion_interna);
-  const uint32_t visible = r == "1920x1080" ? 1080u : r == "1024x576" ? 576u : 720u;
-  const double p = std::min(proporcion, kProporcionMaxima);
-  const uint32_t ancho = uint32_t(std::lround(double(visible) * p / 32.0)) * 32u;
-  return {ancho, (visible + 31u) & ~31u, visible, visible == 1080 ? kModoSalida1080p : 0u, true};
+  const nfsmw::pantalla::Tamano t =
+      nfsmw::pantalla::Calcular(REXCVAR_GET(nfsmw_proporcion_pantalla), REXCVAR_GET(nfsmw_resolucion_interna));
+  return {t.ancho, t.alto, t.visible, t.modo_salida, t.otra_proporcion};
 }
 const TamanoGrande& Grande() {
   static const TamanoGrande t = CalcularGrande();
@@ -406,11 +406,19 @@ void ForzarModoSinAa(uint8_t* base) {
 // What the output table hook needs.
 bool QuiereSalida1080p() { return ModoQueToca() == kModo1080p; }
 
-// For nfsmw_panoramico.cpp and the settings: whether the game draws wider than 16:9, at what width, and how
-// much wider than the 16:9 of the same height (1600x720: 1.25).
+// For nfsmw_panoramico.cpp and the settings: whether the game draws at another proportion than 16:9, at what
+// width, and how much wider than the 16:9 of the same height (1600x720: 1.25; 1152x720: 0.9).
 bool Panoramico() { return Grande().panoramico && ModoSinAaActivo(); }
 uint32_t AnchoPanoramico() { return Grande().ancho; }
 double FactorPanoramico() { return double(Grande().ancho) * 9.0 / (double(Grande().visible) * 16.0); }
+
+// For the presenters (nfsmw_nativo_destinos.cpp and its GLES twin): whether a front buffer is shown at its own
+// proportion instead of 16:9. The non-16:9 front buffer is, narrower too.
+bool ProporcionPropia(uint32_t ancho, uint32_t alto) {
+  const TamanoGrande& g = Grande();
+  return nfsmw::pantalla::ProporcionPropia(
+      ancho, alto, {g.ancho, g.alto, g.visible, g.modo_salida, g.panoramico && ModoSinAaActivo()});
+}
 
 /*
  * Where the game's front buffer really comes from.
