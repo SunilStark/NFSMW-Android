@@ -82,6 +82,19 @@ Three traps of CMake on Windows that cost a lot of time:
    the link, one ThinLTO thread per `ltoJobs`, and links never run beside compiles. With these values the first
    full build took 47 minutes on a 4-core laptop with 7.8 GB.
 
+   **For the Galaxy Tab S10 Lite only** (the APK then needs ARMv8.2, so not for other phones):
+   `'-Pnfsmw.cpu=exynos1380'` compiles the game and the app for ARMv8.2-A with FP16, dot product and RCpc, tuned for
+   the Cortex-A78. Profile-guided optimization with clang, in two full builds:
+   1. `'-Pnfsmw.cpu=exynos1380' '-Pnfsmw.pgo=generar'`: an instrumented APK (libmain ~64 MB, slower on the CPU).
+      Install it, play ~15 minutes of races, and leave the game running: it writes
+      `/sdcard/nsfmw-androidevolved/pgo/nfsmw.profraw` every minute (`[pgo] perfil escrito en ...` in the log).
+   2. From Git Bash: `MSYS_NO_PATHCONV=1 adb pull /sdcard/nsfmw-androidevolved/pgo/nfsmw.profraw out/pgo/`, then
+      `<NDK>/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-profdata.exe merge -o out/pgo/nfsmw.profdata
+      out/pgo/nfsmw.profraw` (the NDK's own llvm-profdata: the format follows its clang).
+   3. `'-Pnfsmw.cpu=exynos1380' '-Pnfsmw.pgo=usar'`: the optimized APK. Code changed since the session is built
+      without its profile (a warning, not an error). The profile is made from the game: it stays in `out/`.
+   Each changes the flags of every game file, so each is a full rebuild (~30 minutes here with 2 jobs).
+
    If Gradle fails with "Unable to establish loopback connection", it was started from a sandboxed shell (an
    agent's tool); run it from an ordinary terminal.
 

@@ -32,6 +32,12 @@ if (!(nativeJobs ==~ /[0-9]{1,2}/) || !(ltoJobs ==~ /[0-9]{1,2}/)) throw new Gra
 // (-Pnfsmw.debuggable=true). Only with an ID suffix, so the published package is never built debuggable.
 def debuggableBuild = providers.gradleProperty('nfsmw.debuggable').getOrElse('false') == 'true'
 if (debuggableBuild && idSuffix.isEmpty()) throw new GradleException('nfsmw.debuggable needs nfsmw.applicationIdSuffix')
+// A build for one SoC (-Pnfsmw.cpu=exynos1380) and clang's profile-guided optimization in two steps
+// (-Pnfsmw.pgo=generar, then -Pnfsmw.pgo=usar with out/pgo/nfsmw.profdata): src/main/cpp/CMakeLists.txt.
+def nativeCpu = providers.gradleProperty('nfsmw.cpu').getOrElse('')
+def nativePgo = providers.gradleProperty('nfsmw.pgo').getOrElse('')
+if (!(nativeCpu in ['', 'exynos1380'])) throw new GradleException('nfsmw.cpu: empty or exynos1380')
+if (!(nativePgo in ['', 'generar', 'usar'])) throw new GradleException('nfsmw.pgo: empty, generar or usar')
 def editionsDir = providers.gradleProperty('nfsmw.editionsDir').orNull
 if (editionsDir != null) {
     if (editionId != 'pal_es') throw new GradleException('Multi-edition packages require the PAL base')
@@ -101,6 +107,7 @@ android {
                 arguments '-DANDROID_STL=c++_shared'
                 arguments "-DNFSMW_EDITION_APP=${editionApp}", "-DNFSMW_EDITION_LIBRARY=${editionLibrary}"
                 arguments "-DNFSMW_TRABAJOS=${nativeJobs}", "-DNFSMW_TRABAJOS_LTO=${ltoJobs}"
+                arguments "-DNFSMW_ANDROID_CPU=${nativeCpu}", "-DNFSMW_ANDROID_PGO=${nativePgo}"
             }
         }
     }

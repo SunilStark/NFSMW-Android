@@ -98,3 +98,45 @@ if(NFSMW_ANDROID_LTO AND CMAKE_BUILD_TYPE STREQUAL "Release")
     # but it can keep the text of each function in its own section and drop the unused ones.
     target_link_options(nfsmw PRIVATE -Wl,--gc-sections -Wl,--icf=safe)
 endif()
+
+# A build for one SoC. exynos1380 (Galaxy Tab S10 Lite): its Cortex-A78 and Cortex-A55 are both ARMv8.2-A with
+# half-precision arithmetic, dot product and RCpc, so the code may use them on either core; it is scheduled for
+# the A78, where the game threads run (android_rendimiento.cpp). Only the game and the app: the SDK's libraries
+# and the launcher's probe stay generic. Empty: generic ARMv8-A, for any phone.
+set(NFSMW_ANDROID_CPU "" CACHE STRING "SoC de destino: vacio (cualquier ARMv8-A) o exynos1380")
+if(NFSMW_ANDROID_CPU STREQUAL "exynos1380")
+    set(NFSMW_CPU_OPCIONES -march=armv8.2-a+fp16+dotprod+rcpc -mtune=cortex-a78)
+elseif(NFSMW_ANDROID_CPU)
+    message(FATAL_ERROR "NFSMW_ANDROID_CPU tiene que ser vacio o exynos1380 (es '${NFSMW_ANDROID_CPU}')")
+endif()
+
+# Profile-guided optimization with clang's own profiles, in two steps (the GCC path in app/CMakeLists.txt is the
+# Switch's).
+#   generar: instrumented build; android_pgo.cpp writes the counters to pgo/nfsmw.profraw in the game folder
+#            every minute (Android kills the app instead of letting it exit, so the usual dump at exit never
+#            runs). After a session: adb pull it, then llvm-profdata merge -o out/pgo/nfsmw.profdata.
+#   usar:    rebuilds with that profile.
+set(NFSMW_ANDROID_PGO "" CACHE STRING "Optimizacion por perfil: vacio, generar o usar")
+get_filename_component(NFSMW_PGO_PERFIL "${CMAKE_CURRENT_LIST_DIR}/../../../../../out/pgo/nfsmw.profdata" ABSOLUTE)
+if(NFSMW_ANDROID_PGO STREQUAL "generar")
+    list(APPEND NFSMW_CPU_OPCIONES -fprofile-generate)
+    target_link_options(nfsmw PRIVATE -fprofile-generate)
+    target_sources(nfsmw PRIVATE "${CMAKE_CURRENT_LIST_DIR}/android_pgo.cpp")
+elseif(NFSMW_ANDROID_PGO STREQUAL "usar")
+    if(NOT EXISTS "${NFSMW_PGO_PERFIL}")
+        message(FATAL_ERROR "Falta el perfil ${NFSMW_PGO_PERFIL} (llvm-profdata merge del .profraw de la tableta)")
+    endif()
+    # Profiled code that changed since the session is optimized without its profile: warn, do not fail.
+    list(APPEND NFSMW_CPU_OPCIONES "-fprofile-use=${NFSMW_PGO_PERFIL}" -Wno-profile-instr-unprofiled
+         -Wno-profile-instr-out-of-date -Wno-backend-plugin)
+elseif(NFSMW_ANDROID_PGO)
+    message(FATAL_ERROR "NFSMW_ANDROID_PGO tiene que ser vacio, generar o usar (es '${NFSMW_ANDROID_PGO}')")
+endif()
+if(NFSMW_CPU_OPCIONES)
+    foreach(objetivo nfsmw_recomp nfsmw)
+        if(TARGET ${objetivo})
+            target_compile_options(${objetivo} PRIVATE ${NFSMW_CPU_OPCIONES})
+        endif()
+    endforeach()
+    message(STATUS "nfsmw: CPU '${NFSMW_ANDROID_CPU}', PGO '${NFSMW_ANDROID_PGO}': ${NFSMW_CPU_OPCIONES}")
+endif()
