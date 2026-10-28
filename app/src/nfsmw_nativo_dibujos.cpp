@@ -1,4 +1,4 @@
-﻿// nfsmw - native renderer, steps C3, C4, C5c and C6 (see nfsmw_nativo_dibujos.h).
+// nfsmw - native renderer, steps C3, C4, C5c and C6 (see nfsmw_nativo_dibujos.h).
 //
 // What it covers
 //   - Shaders: modules of the NFSSPV library with the XenosRecomp interface
@@ -2837,7 +2837,7 @@ class DibujosVulkanImpl final : public DibujosVulkan {
       // the first draw of each frame that samples it. Without checking the dimension: over-counting only
       // means the reflection gets drawn.
       if (medir_visibilidad_ && (fetch[0] & 0x3) == uint32_t(xenos::FetchConstantType::kTexture) &&
-          ((fetch[1] & 0xFFFFF000u) & 0x1FFFFFFFu) == nfsmw::reflejo_demanda::kDireccion) {
+          ((fetch[1] & 0xFFFFF000u) & 0x1FFFFFFFu) == nfsmw::reflejo_demanda::Direccion()) {
         lee_reflejo = true;
       }
       ++samplers_preparados_;
@@ -5431,8 +5431,15 @@ class DibujosVulkanImpl final : public DibujosVulkan {
   // loadOp = CLEAR).
   bool BorrarProfundidadEnPase(VkCommandBuffer comandos, const ImagenNativa& imagen,
                                float profundidad, uint32_t stencil) override {
-    if (comandos == VK_NULL_HANDLE || imagen.vista == VK_NULL_HANDLE || !imagen.ancho ||
-        !imagen.alto) {
+    return BorrarProfundidadAreaEnPase(comandos, imagen, profundidad, stencil,
+                                       VkRect2D{{0, 0}, {imagen.ancho, imagen.alto}});
+  }
+
+  bool BorrarProfundidadAreaEnPase(VkCommandBuffer comandos, const ImagenNativa& imagen, float profundidad,
+                                   uint32_t stencil, const VkRect2D& area) override {
+    if (comandos == VK_NULL_HANDLE || imagen.vista == VK_NULL_HANDLE || !area.extent.width || !area.extent.height ||
+        area.offset.x < 0 || area.offset.y < 0 || uint32_t(area.offset.x) + area.extent.width > imagen.ancho ||
+        uint32_t(area.offset.y) + area.extent.height > imagen.alto) {
       return false;
     }
     TerminarPase();  // a pass cannot be opened inside another
@@ -5453,7 +5460,7 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     inicio.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     inicio.renderPass = pase;
     inicio.framebuffer = framebuffer;
-    inicio.renderArea.extent = {imagen.ancho, imagen.alto};
+    inicio.renderArea = area;
     inicio.clearValueCount = 1;
     inicio.pClearValues = &borrado;
     dfn_.vkCmdBeginRenderPass(comandos, &inicio, VK_SUBPASS_CONTENTS_INLINE);
@@ -10336,9 +10343,26 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     // longer tells them apart: the scene fell into the shadow bucket and vanished from its own category.
     categoria_pase_ = CategoriaDeDestino(pitch, claves);
     contexto_->MarcarGpu(categoria_pase_);
+    // Only the rectangle the game uses (see nfsmw_nativo_pase_area_util).
+    uint32_t alto_pase = alto;
+    if (area_util_) {
+      const auto it = alto_util_.find(pitch);
+      if (it != alto_util_.end() && it->second < alto) {
+        alto_pase = it->second;
+      }
+    }
     const bool sombras_sin_load =
         es_sombras && REXCVAR_GET(nfsmw_nativo_pase_sombras_sin_load);
-    const VkRenderPass pase = PaseDe(formatos, sombras_sin_load ? kCargaIgnorar : kCargaLeer);
+    // nfsmw_nativo_borrado_en_pase. The clears C2 deferred for these attachments are done by the pass itself
+    // (loadOp = CLEAR): on a tiled GPU (Mali) a clear on its own writes the whole image to memory and the
+    // next pass loads it back; done here, neither happens. A pending depth clear wins over the shadow map's
+    // DONT_CARE: that would drop it.
+    VkClearValue borrados[5]{};
+    const uint32_t mascara_borrado = contexto_->BorradosParaPase(imagenes, ancho, alto_pase, borrados);
+    const uint32_t modo_carga = mascara_borrado ? (kCargaMascara | mascara_borrado)
+                                : sombras_sin_load ? kCargaIgnorar
+                                                   : kCargaLeer;
+    const VkRenderPass pase = PaseDe(formatos, modo_carga);
     if (pase == VK_NULL_HANDLE) {
       return Rechazar(42, "no se pudo crear el render pass");
     }
@@ -10360,15 +10384,19 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     inicio.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     inicio.renderPass = pase;
     inicio.framebuffer = framebuffer;
-    // Only the rectangle the game uses (see nfsmw_nativo_pase_area_util).
-    uint32_t alto_pase = alto;
-    if (area_util_) {
-      const auto it = alto_util_.find(pitch);
-      if (it != alto_util_.end() && it->second < alto) {
-        alto_pase = it->second;
-      }
-    }
     inicio.renderArea.extent = {ancho, alto_pase};
+    // One clear value per attachment, in the order CrearPase numbers them (the present ones, 0 to 4).
+    std::array<VkClearValue, 5> valores_borrado{};
+    if (mascara_borrado) {
+      uint32_t n = 0;
+      for (uint32_t i = 0; i < 5; ++i) {
+        if (formatos[i]) {
+          valores_borrado[n++] = borrados[i];
+        }
+      }
+      inicio.clearValueCount = n;
+      inicio.pClearValues = valores_borrado.data();
+    }
     // nfsmw_nativo_diag_borrados. What this pass loads and stores of each render target, to compare with
     // what is cleared of it (C2 clears per target). Before opening the pass.
     for (const ImagenNativa* imagen : imagenes) {
@@ -10381,6 +10409,9 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     const auto antes_inicio = std::chrono::steady_clock::now();
     BarreraTotal(dfn_, cmd);  // nfsmw_nativo_barrera_total (iOS)
     dfn_.vkCmdBeginRenderPass(cmd, &inicio, VK_SUBPASS_CONTENTS_INLINE);
+    if (mascara_borrado) {
+      contexto_->ConfirmarBorradosEnPase(imagenes, mascara_borrado, ancho, alto_pase);
+    }
     ns_render_pass_ += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now() - antes_inicio).count());
     if (cronometrar_) {
@@ -10428,7 +10459,9 @@ class DibujosVulkanImpl final : public DibujosVulkan {
 
   // ZCULL: three load modes. kCargaBorrar is needed to clear the depth of images created without
   // TRANSFER_DST, the only ones eligible for a ZCULL plane.
-  enum : uint32_t { kCargaLeer = 0, kCargaIgnorar = 1, kCargaBorrar = 2 };
+  // nfsmw_nativo_borrado_en_pase: kCargaMascara | bits 0-4 clears those attachments (0-3 color, 4 depth) with
+  // loadOp = CLEAR and loads the others.
+  enum : uint32_t { kCargaLeer = 0, kCargaIgnorar = 1, kCargaBorrar = 2, kCargaMascara = 0x80 };
 
   VkRenderPass PaseDe(const uint32_t formatos[5], uint32_t modo_carga = kCargaLeer) {
     // The mode is part of the key: two render passes with the same formats but a different loadOp are
@@ -10588,13 +10621,15 @@ class DibujosVulkanImpl final : public DibujosVulkan {
       a.samples = VK_SAMPLE_COUNT_1_BIT;
       // With the test active, the shadow map does not load its previous content: the game clears it before
       // drawing it, so fetching the 1600x1600 tile only to throw it away is wasted work.
+      const bool borrar = modo_carga == kCargaBorrar ||
+                          ((modo_carga & kCargaMascara) != 0 && (modo_carga & (1u << i)) != 0);
       a.loadOp = modo_carga == kCargaIgnorar ? VK_ATTACHMENT_LOAD_OP_DONT_CARE
-                 : modo_carga == kCargaBorrar ? VK_ATTACHMENT_LOAD_OP_CLEAR
-                                              : VK_ATTACHMENT_LOAD_OP_LOAD;
+                 : borrar                    ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                             : VK_ATTACHMENT_LOAD_OP_LOAD;
       a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      a.stencilLoadOp = i != 4                       ? VK_ATTACHMENT_LOAD_OP_DONT_CARE
-                        : modo_carga == kCargaBorrar ? VK_ATTACHMENT_LOAD_OP_CLEAR
-                                                     : VK_ATTACHMENT_LOAD_OP_LOAD;
+      a.stencilLoadOp = i != 4   ? VK_ATTACHMENT_LOAD_OP_DONT_CARE
+                        : borrar ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                 : VK_ATTACHMENT_LOAD_OP_LOAD;
       a.stencilStoreOp = i == 4 ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
       a.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
       a.finalLayout = VK_IMAGE_LAYOUT_GENERAL;

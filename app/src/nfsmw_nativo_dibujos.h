@@ -135,6 +135,28 @@ class ContextoDestinos {
     (void)ancho;
     (void)alto;
   }
+  // nfsmw_nativo_borrado_en_pase (see nfsmw_nativo_destinos.cpp). The clears C2 has deferred for the
+  // attachments of the pass about to open: bit i of the result (0-3 color, 4 depth) if that attachment's
+  // pending clear can be done by the pass itself with loadOp = CLEAR over ancho x alto, with its value in
+  // valores[i]. It only looks: nothing changes until ConfirmarBorradosEnPase, so a pass that fails to open
+  // loses nothing.
+  virtual uint32_t BorradosParaPase(const std::array<ImagenNativa*, 5>& imagenes, uint32_t ancho, uint32_t alto,
+                                    VkClearValue valores[5]) {
+    (void)imagenes;
+    (void)ancho;
+    (void)alto;
+    (void)valores;
+    return 0;
+  }
+  // The pass opened with loadOp = CLEAR on the attachments of `mascara` over ancho x alto: their pending
+  // clears are done (whatever lies outside that area stays pending).
+  virtual void ConfirmarBorradosEnPase(const std::array<ImagenNativa*, 5>& imagenes, uint32_t mascara, uint32_t ancho,
+                                       uint32_t alto) {
+    (void)imagenes;
+    (void)mascara;
+    (void)ancho;
+    (void)alto;
+  }
   // nfsmw_nativo_sombra_minimo (see nfsmw_nativo_destinos.cpp). When a pass opens: true if it is the
   // shadow map car pass that C2 is observing or applying, and then each draw is validated with
   // DibujoDeCochesSombra. `solo_profundidad`: the pass has no color targets.
@@ -308,6 +330,16 @@ class DibujosVulkan {
   // can give a ZCULL plane. Returns false if it could not.
   virtual bool BorrarProfundidadEnPase(VkCommandBuffer comandos, const ImagenNativa& imagen,
                                        float profundidad, uint32_t stencil) = 0;
+  // The same over the `area` rectangle only (nfsmw_nativo_borrado_en_pase: the rows a pass did not cover).
+  virtual bool BorrarProfundidadAreaEnPase(VkCommandBuffer comandos, const ImagenNativa& imagen, float profundidad,
+                                           uint32_t stencil, const VkRect2D& area) {
+    (void)comandos;
+    (void)imagen;
+    (void)profundidad;
+    (void)stencil;
+    (void)area;
+    return false;
+  }
   // nfsmw_nativo_borrar_area_util. Clears only the `area` rectangle of a color image by opening a pass
   // with loadOp = CLEAR. Returns false if it could not.
   virtual bool BorrarColorEnPase(VkCommandBuffer comandos, const ImagenNativa& imagen, const VkClearColorValue& color,

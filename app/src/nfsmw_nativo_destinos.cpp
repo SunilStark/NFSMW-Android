@@ -449,6 +449,27 @@ REXCVAR_DEFINE_BOOL(nfsmw_nativo_borrar_area_util, false, "NFSMW",
                     "Renderizador nativo (25/09, build 184): los borrados de color borran solo las filas que se usan de "
                     "verdad; el resto se borra antes de que algo lo use. Misma imagen. Necesita "
                     "nfsmw_nativo_diag_borrados. false = la imagen entera, como antes");
+/*
+ * Clears done by the next pass (nfsmw_nativo_borrado_en_pase).
+ *
+ * On the Switch's Maxwell a clear and a loadOp = LOAD are cheap. On a tiled GPU (Mali) a clear on its own writes
+ * the whole image to memory (1280x1280 for a 1280x720 scene) and the next pass, opened with LOAD, reads it all
+ * back; ~9 clears per race frame were 3.3 ms of the tablet's 46.5 ms of GPU. Here a clear is only recorded, and
+ * the next pass on that render target does it with loadOp = CLEAR, which costs nothing on a tiler: the tile
+ * starts with the value and nothing is read or written for it.
+ *
+ * Any other use first does the clear as before (a copy or resolve of the target, a restore, a swap with its
+ * resolved texture, a copy back for a resolve, the shadow minimum): the same hooks as the band of
+ * nfsmw_nativo_borrar_area_util. A pass that does not cover the whole image (it only opens the rows the game
+ * uses) leaves the rows below still pending, and they are cleared before anything reaches them. A pending
+ * clear that cannot be done is a DIFERENCIA in the log and the setting turns off for the session.
+ * false = every clear is done when the game asks, as on the Switch.
+ */
+REXCVAR_DEFINE_BOOL(nfsmw_nativo_borrado_en_pase, REX_PLATFORM_ANDROID != 0, "NFSMW",
+                    "Renderizador nativo (Android, GPUs por mosaicos): cada borrado lo hace el pase siguiente de ese "
+                    "destino con loadOp = CLEAR, sin escribir la imagen entera en memoria ni volver a leerla. Misma "
+                    "imagen; se comprueba sola. false = borrar en el momento, como en la Switch")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 // Defined in nfsmw_nativo_dibujos.cpp; here it is only read so as not to open two queries of the same type
 // at once.
 REXCVAR_DECLARE(int32_t, nfsmw_nativo_estadisticas_por_dibujo_s);
@@ -1017,6 +1038,9 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
                 invalidar_cada_copia_ ? "SI" : "no");
     REXLOG_INFO("[nativo] C2: salida sin esperar a la anterior (nfsmw_nativo_salida_sin_espera) = {}",
                 salida_sin_espera_ ? "SI" : "no");
+    borrado_en_pase_ = REXCVAR_GET(nfsmw_nativo_borrado_en_pase);
+    REXLOG_INFO("[nativo] C2: borrados hechos por el pase siguiente (nfsmw_nativo_borrado_en_pase) = {}",
+                borrado_en_pase_ ? "SI" : "no");
     marcas_precisas_ = REXCVAR_GET(nfsmw_nativo_marcas_precisas);
     alternar_marcas_s_ = REXCVAR_GET(nfsmw_nativo_marcas_precisas_alternar_s);
     inicio_marcas_ = std::chrono::steady_clock::now();
@@ -1455,6 +1479,9 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     // uses to stop copying the bottom rows that nobody draws or reads (the scene render target is created
     // 1280x1280 to draw 1280x720).
     AnotarAreaUtil(*destino_render, y1);
+    if (copiar) {
+      CompletarBorradoPendiente(*destino_render, uint32_t(std::max(y1, 0)));  // nfsmw_nativo_borrado_en_pase
+    }
     AnotarUsoBorrado(*destino_render, uint32_t(std::max(x1, 0)), uint32_t(std::max(y1, 0)));
     uint32_t base_resuelta = 0;
     Resuelta* resuelta = nullptr;
@@ -1703,8 +1730,14 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
             }
           }
         }
-        // nfsmw_nativo_borrar_area_util. Only the rows in use; the bottom band, if needed.
-        if (!BorrarColorAreaUtil(*destino_render, color)) {
+        // nfsmw_nativo_borrado_en_pase: the next pass on it does the clear. Otherwise
+        // nfsmw_nativo_borrar_area_util: only the rows in use; the bottom band, if needed.
+        if (borrado_en_pase_ && dibujos_) {
+          QuitarBanda(*destino_render);  // the pending clear covers the whole image
+          VkClearValue valor{};
+          valor.color = color;
+          DiferirBorrado(*destino_render, false, valor);
+        } else if (!BorrarColorAreaUtil(*destino_render, color)) {
           AntesDeTransferir();
           dfn_.vkCmdClearColorImage(comandos_trabajo_, destino_render->imagen,
                                     VK_IMAGE_LAYOUT_GENERAL, &color, 1, &kRangoColor);
@@ -1745,6 +1778,14 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     // nfsmw_nativo_diag_borrados. Without TRANSFER_DST the clear is done by opening a pass (ZCULL).
     AnotarBorradoDiag(*profundidad, info & 0xFFF, (info >> 16) & 0x1, pitch, true,
                       !profundidad->admite_destino_de_copia);
+    // nfsmw_nativo_borrado_en_pase: the next pass on it does the clear (and with it the ZCULL reset, which only a
+    // loadOp = CLEAR gives).
+    if (borrado_en_pase_ && dibujos_) {
+      VkClearValue diferido{};
+      diferido.depthStencil = valor;
+      DiferirBorrado(*profundidad, true, diferido);
+      return;
+    }
     // ZCULL: see Preparar. Without TRANSFER_DST the clear has to be done by opening a pass.
     if (!profundidad->admite_destino_de_copia && dibujos_) {
       // This bool cannot be dropped. If the clear pass cannot be opened, the depth keeps the previous frame's
@@ -1829,6 +1870,7 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     Preparar(*profundidad);
     Preparar(resuelta->imagen);
     AnotarAreaUtil(*profundidad, y1);  // the area the game really resolves
+    CompletarBorradoPendiente(*profundidad, uint32_t(std::max(y1, 0)));  // nfsmw_nativo_borrado_en_pase
     AnotarUsoBorrado(*profundidad, uint32_t(std::max(x1, 0)), uint32_t(std::max(y1, 0)));
     // With the scaled shadow map, the rectangle the guest sends is in 1600-pixel units even though the image
     // is smaller. Everything below reasons in guest pixels.
@@ -2995,7 +3037,7 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     // entry that has already been looked up: it costs nothing even though this is called thousands of times
     // per frame.
     ++it->second.lecturas;
-    if (direccion == nfsmw::reflejo_demanda::kDireccion) {
+    if (direccion == nfsmw::reflejo_demanda::Direccion()) {
       nfsmw::reflejo_demanda::AnotarLectura();  // nfsmw_reflejo_bajo_demanda
     }
     // nfsmw_nativo_profundidad_perezosa. Who requests each depth texture; if its copy is deferred and this is
@@ -3251,6 +3293,132 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     }
   }
 
+  // nfsmw_nativo_borrado_en_pase. Records the clear instead of doing it; a newer clear replaces an older one that
+  // nothing used.
+  void DiferirBorrado(const Imagen& imagen, bool profundidad, const VkClearValue& valor) {
+    auto [it, nuevo] = borrados_pendientes_.try_emplace(&imagen);
+    if (!nuevo && it->second.imagen == imagen.imagen) {
+      ++borrados_sustituidos_;
+    }
+    it->second = BorradoPendiente{imagen.imagen, profundidad, valor, 0};
+    ++borrados_diferidos_;
+  }
+
+  // Does the pending clear of that target now, outside any pass, before another use (a copy, a restore, a swap)
+  // that reaches row alto_uso. Rows left pending below a pass stay so while the use does not reach them (one row
+  // of margin: a linear blit can read the row below its rectangle).
+  void CompletarBorradoPendiente(const Imagen& imagen, uint32_t alto_uso = UINT32_MAX) {
+    if (borrados_pendientes_.empty()) {
+      return;
+    }
+    const auto it = borrados_pendientes_.find(&imagen);
+    if (it == borrados_pendientes_.end()) {
+      return;
+    }
+    if (it->second.desde > 0 && it->second.imagen == imagen.imagen && alto_uso != UINT32_MAX &&
+        alto_uso + 1 < it->second.desde) {
+      return;
+    }
+    const BorradoPendiente p = it->second;
+    borrados_pendientes_.erase(it);
+    if (p.imagen != imagen.imagen) {
+      ++borrados_huerfanos_;  // a new image: the old one, which the clear was for, is gone
+      return;
+    }
+    if (p.desde >= imagen.alto) {
+      return;
+    }
+    const VkRect2D area{{0, int32_t(p.desde)}, {imagen.ancho, imagen.alto - p.desde}};
+    bool hecho = false;
+    if (dibujos_ && Grabar()) {
+      dibujos_->TerminarPase();
+      MarcarGpu(kGpuBorrados);
+      if (!p.profundidad) {
+        hecho = dibujos_->BorrarColorEnPase(comandos_trabajo_, imagen, p.valor.color, area);
+      } else if (imagen.admite_destino_de_copia && p.desde == 0) {
+        AntesDeTransferir();
+        borrar_profundidad_(comandos_trabajo_, imagen.imagen, VK_IMAGE_LAYOUT_GENERAL, &p.valor.depthStencil, 1,
+                            &kRangoProfundidad);
+        hecho = true;
+      } else {
+        hecho = dibujos_->BorrarProfundidadAreaEnPase(comandos_trabajo_, imagen, p.valor.depthStencil.depth,
+                                                      p.valor.depthStencil.stencil, area);
+      }
+    }
+    if (hecho) {
+      ++borrados_completados_;
+      return;
+    }
+    // It could not be done: the same as the old path for color, and for good from now on.
+    if (!p.profundidad && Grabar()) {
+      AntesDeTransferir();
+      dfn_.vkCmdClearColorImage(comandos_trabajo_, imagen.imagen, VK_IMAGE_LAYOUT_GENERAL, &p.valor.color, 1,
+                                &kRangoColor);
+    }
+    if (borrado_en_pase_) {
+      borrado_en_pase_ = false;
+      REXLOG_ERROR("[nativo] C2 borrados en pase: DIFERENCIA, no se pudo hacer un borrado pendiente de {} {}x{} desde la "
+                   "fila {}. Apagado para el resto de la sesion: se borra en el momento",
+                   p.profundidad ? "profundidad" : "color", imagen.ancho, imagen.alto, p.desde);
+    }
+  }
+
+  // ContextoDestinos. The pass about to open: which pending clears it can do itself (the whole width, from its
+  // first row) and which have to be done now, before it opens (a pending band it would load part of).
+  uint32_t BorradosParaPase(const std::array<ImagenNativa*, 5>& imagenes, uint32_t ancho, uint32_t alto,
+                            VkClearValue valores[5]) override {
+    if (borrados_pendientes_.empty()) {
+      return 0;
+    }
+    uint32_t mascara = 0;
+    for (uint32_t i = 0; i < 5; ++i) {
+      const Imagen* imagen = imagenes[i];
+      if (!imagen) {
+        continue;
+      }
+      const auto it = borrados_pendientes_.find(imagen);
+      if (it == borrados_pendientes_.end()) {
+        continue;
+      }
+      const BorradoPendiente& p = it->second;
+      if (p.imagen != imagen->imagen) {
+        CompletarBorradoPendiente(*imagen);  // counts it as orphaned and drops it
+        continue;
+      }
+      if (p.desde >= alto) {
+        continue;  // only rows below what this pass opens: they stay pending
+      }
+      if (borrado_en_pase_ && p.desde == 0 && ancho == imagen->ancho && p.profundidad == (i == 4)) {
+        mascara |= 1u << i;
+        valores[i] = p.valor;
+      } else {
+        CompletarBorradoPendiente(*imagen);  // the pass would load part of it: done before it opens
+      }
+    }
+    return mascara;
+  }
+
+  void ConfirmarBorradosEnPase(const std::array<ImagenNativa*, 5>& imagenes, uint32_t mascara, uint32_t ancho,
+                               uint32_t alto) override {
+    (void)ancho;
+    for (uint32_t i = 0; i < 5; ++i) {
+      if (!(mascara & (1u << i)) || !imagenes[i]) {
+        continue;
+      }
+      const auto it = borrados_pendientes_.find(imagenes[i]);
+      if (it == borrados_pendientes_.end()) {
+        continue;
+      }
+      ++borrados_en_pase_;
+      ++borrados_en_pase_previos_[i];
+      if (alto >= imagenes[i]->alto) {
+        borrados_pendientes_.erase(it);
+      } else {
+        it->second.desde = alto;  // the rows below the pass stay pending
+      }
+    }
+  }
+
   // Every 20 s, per render target, what was cleared against what was used (C2 borrados por destino).
   // Clears cost ~0.075 ms real per Mpixel (measured, see "C2 borrados saltados").
   void InformeBorrados() {
@@ -3268,6 +3436,16 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     informe_borrados_ = ahora;
     const uint64_t fotogramas = presentados_ - presentados_informe_borrados_;
     presentados_informe_borrados_ = presentados_;
+    if (borrados_diferidos_ > 0) {
+      NFSMW_INFORME_ANILLO("[nativo] C2 borrados en pase (Android, desde el arranque): {} diferidos; {} hechos por el "
+                           "pase siguiente con loadOp = CLEAR ({} de color, {} de profundidad), {} hechos aparte antes de "
+                           "otro uso, {} sustituidos por otro borrado sin usarse, {} sin imagen ya; {} pendientes; {}",
+                           borrados_diferidos_, borrados_en_pase_,
+                           borrados_en_pase_previos_[0] + borrados_en_pase_previos_[1] + borrados_en_pase_previos_[2] +
+                               borrados_en_pase_previos_[3],
+                           borrados_en_pase_previos_[4], borrados_completados_, borrados_sustituidos_,
+                           borrados_huerfanos_, borrados_pendientes_.size(), borrado_en_pase_ ? "activo" : "APAGADO");
+    }
     if (diag_borrados_ && fotogramas > 0 && !uso_borrados_.empty()) {
       struct Fila {
         const UsoBorrado* uso;
@@ -4189,6 +4367,7 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     }
     // nfsmw_nativo_diag_borrados. The whole image becomes a sampled texture, so all of it counts as used
     // (noted before the images change places).
+    CompletarBorradoPendiente(destino);  // nfsmw_nativo_borrado_en_pase: the clear belongs to this image
     AnotarUsoBorrado(destino, destino.ancho, destino.alto);
     // Careful: OlvidarImagen must not be called here. It frees the descriptor slot and reuses it in the
     // same frame, so draws already recorded with it end up reading another image (flicker). Bumping the
@@ -4351,6 +4530,7 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     copia.srcSubresource = {aspecto, 0, 0, 1};
     copia.dstSubresource = {aspecto, 0, 0, 1};
     copia.extent = {destino.ancho, alto, 1};
+    CompletarBorradoPendiente(destino, alto);  // nfsmw_nativo_borrado_en_pase: clear first, then restore on top
     AnotarUsoBorrado(destino, destino.ancho, alto);  // nfsmw_nativo_diag_borrados
     MarcarGpu(kGpuCopias);
     AntesDeTransferir();
@@ -4392,6 +4572,7 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     copia.srcSubresource = {aspecto, 0, 0, 1};
     copia.dstSubresource = {aspecto, 0, 0, 1};
     copia.extent = {destino.ancho, destino.alto, 1};
+    CompletarBorradoPendiente(destino);  // nfsmw_nativo_borrado_en_pase, like the restore
     AnotarUsoBorrado(destino, destino.ancho, destino.alto);  // nfsmw_nativo_diag_borrados, like the restore
     MarcarGpu(kGpuCopias);
     AntesDeTransferir();
@@ -4564,6 +4745,7 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     Preparar(destino);
     MarcarGpu(kGpuBorrados);
     const VkClearDepthStencilValue valor{1.0f, 0};
+    CompletarBorradoPendiente(destino);  // nfsmw_nativo_borrado_en_pase: the game's clear goes first
     AntesDeTransferir();
     borrar_profundidad_(comandos_trabajo_, destino.imagen, VK_IMAGE_LAYOUT_GENERAL, &valor, 1, &kRangoProfundidad);
     AnotarUsoBorrado(destino, destino.ancho, destino.alto);  // nfsmw_nativo_diag_borrados: like the restore
@@ -5337,9 +5519,7 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
   // (address, size, Mpixels and reads) because it is the only thing that tells whether a copy is
   // needed. There are ~20 addresses in a race, which fit easily in one line.
   void AnotarCopia(uint32_t base, uint32_t ancho, uint32_t alto, uint64_t dibujos) {
-    if (base == nfsmw::reflejo_demanda::kDireccion) {
-      nfsmw::reflejo_demanda::AnotarCopia();  // nfsmw_reflejo_bajo_demanda
-    }
+    nfsmw::reflejo_demanda::AnotarCopiaDestino(base, ancho, alto);  // nfsmw_reflejo_bajo_demanda
     CopiaDestino& d = copias_por_destino_[base];
     d.ancho = ancho;
     d.alto = alto;
@@ -6303,6 +6483,23 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
   uint64_t area_util_pixeles_ = 0;
   uint64_t area_util_pixeles_previos_ = 0;
   static constexpr uint64_t kAreaUtilCiclos = 120;  // measured clears of a target before trimming its own
+  // nfsmw_nativo_borrado_en_pase. Clears still to be done, by render target (destinos_ and profundidades_ never
+  // erase: the key stays valid). `desde`: the first row still to clear (0 = all of it; more after a pass that only
+  // covered the top rows).
+  struct BorradoPendiente {
+    VkImage imagen = VK_NULL_HANDLE;  // the image it was recorded for (a swap or a recreation changes it)
+    bool profundidad = false;
+    VkClearValue valor{};
+    uint32_t desde = 0;
+  };
+  bool borrado_en_pase_ = false;
+  std::unordered_map<const Imagen*, BorradoPendiente> borrados_pendientes_;
+  uint64_t borrados_diferidos_ = 0;    // clears recorded instead of done
+  uint64_t borrados_en_pase_ = 0;      // done by a pass with loadOp = CLEAR
+  uint64_t borrados_completados_ = 0;  // done on their own before another use (as before)
+  uint64_t borrados_sustituidos_ = 0;  // replaced by another clear before anything used them: never done
+  uint64_t borrados_huerfanos_ = 0;    // the target's image changed underneath (recreated): dropped
+  uint64_t borrados_en_pase_previos_[5] = {};
   // nfsmw_nativo_profundidad_perezosa. Deferred depth copies, by texture address.
   struct CopiaPendiente {
     const Imagen* origen = nullptr;  // depth target (profundidades_ never erases: the pointer stays valid)
