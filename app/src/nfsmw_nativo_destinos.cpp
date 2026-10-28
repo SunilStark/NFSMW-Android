@@ -318,6 +318,25 @@ REXCVAR_DEFINE_BOOL(nfsmw_nativo_profundidad_perezosa, true, "NFSMW",
                     "final solo se copia si un dibujo la muestrea de verdad (sin el desenfoque, ninguno). La imagen no "
                     "cambia; ~0,35 ms de GPU por fotograma. Se comprueba sola. false = copiar siempre, como antes");
 /*
+ * Drop the deferred depth copy when its source is written again, even before the composite asks for it
+ * (nfsmw_nativo_profundidad_perezosa_tirar).
+ *
+ * The rule above drops a deferred copy only if the composite without blur requested the texture before the
+ * depth render target was written again. On the tablet (1280x720, a race) the game always writes it again
+ * first: 12,253 copies deferred, 0 sampled by a draw, 0 dropped. Every one was recorded, 0.92 Mpixels per
+ * frame, about a third of the frame's copies, for a texture whose only reader is the composite's dead sample.
+ *
+ * A copy is only deferred when, in the last kPerezosaFotogramas, the composite without blur was its only
+ * reader; so it is dropped here too. The composite then samples the texture's older content, which its
+ * specialization constant throws away. The guard is the same: if a draw really samples a dropped copy,
+ * DIFERENCIA in the log and the lazy depth turns off for the session. Report line: "C2 profundidad perezosa",
+ * the "tiradas" figure. false = record it, as before.
+ */
+REXCVAR_DEFINE_BOOL(nfsmw_nativo_profundidad_perezosa_tirar, REX_PLATFORM_ANDROID != 0, "NFSMW",
+                    "Renderizador nativo (Android): la copia de profundidad aplazada se tira tambien cuando su origen "
+                    "se vuelve a escribir antes de que la composicion la pida (su unico lector, que no la usa). "
+                    "Misma imagen; se comprueba sola. false = grabarla, como antes");
+/*
  * The front buffer is drawn from its render target, without copying it (nfsmw_nativo_frontal_perezoso).
  *
  * At the end of each frame the game resolves the 1024x576 output (the pitch-1040 render target) to one of
@@ -3592,7 +3611,8 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
       // Dropped even within the same frame if the composite without blur already requested it (leida_muerta).
       // Keeping same-frame copies saved nothing: the game always rewrites the source within the same frame,
       // and the reader watch saw 0 reads after the rewrite. The guard catches a late read.
-      if (!it->second.leida_muerta) {
+      // nfsmw_nativo_profundidad_perezosa_tirar: dropped also before the composite asks (see its definition).
+      if (!it->second.leida_muerta && !REXCVAR_GET(nfsmw_nativo_profundidad_perezosa_tirar)) {
         ++it;  // GrabarCopiaPendiente erases that entry: the iterator is already on the next one
         GrabarCopiaPendiente(direccion);
         ++perezosa_copiadas_escritura_;
