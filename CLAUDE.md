@@ -257,7 +257,7 @@ battery use **Unrestricted**, Game Booster on.
   - `android: HIDE button on the touch pad`, `android: Back twice asks to leave the game and returns to the
     launcher` (`RestartActivity` in its own process). Both confirmed by the owner.
   - `android: the panel's vsync as the game's vblank, and 45 FPS (step 6)`: `android_vsync.cpp`. Pacing confirmed in
-    the log; the 45 limit itself not played yet.
+    the log; at the 45 limit races run 42-44.6 FPS and the owner finds them smooth (`out/tablet/sesion9.log`).
   - `android: reflections nothing reads, and a still reflection that follows the car`: Car reflections → Off (the
     default) also unpins the mirror face (6.2 ms); one face redrawn every 30 frames; the road reflection's EDRAM
     address is learned (0x07647000 at 1280x720 on the tablet, not 0x07C5A000).
@@ -323,6 +323,22 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
   and the previous race was at the 60 limit, so this is no clean A/B. GPU per frame: scene 9.5-11.3 ms, copies 3.0,
   gaps between jobs 2.8-3.4, blur 1.9, scene without depth 1.7-1.8, shadows 1.4-1.6, small targets 1.1. For a
   steady 45, the copies (3 ms) and the gaps are the next work.
+- Copies: the lazy scene-depth copy (`nfsmw_nativo_profundidad_perezosa`) never dropped one on the tablet (12,253
+  deferred, 0 dropped: the depth target is always rewritten before the composite asks). Dropping it at the rewrite
+  (`nfsmw_nativo_profundidad_perezosa_tirar`) tripped the guard in the first race: a real draw sampled 08C90000
+  after the drop. So it is **off** by default; the reader is not identified yet. The other repeated 1280x720 copy
+  (09758000, its second resolve per frame) was already measured upstream as no saving with the lazy composite.
+- Step 8 done in code and run (`android: a build for the Exynos 1380, and clang PGO`), but **not yet measured
+  against the build before it**: the first race on it (`out/tablet/sesion12_todo.log`) ran 36-40 FPS with 21-24.6
+  ms of GPU per frame, against 42-44.6 FPS and 19-20 ms in sesion9, with the busiest CPU thread the same or a
+  little lower (7.2-9.1 ms against 8.7-9.5). A CPU-side build does not change the GPU's work, so the tablet's state
+  (after an hour of builds and a 15-minute instrumented session) is the likely cause; the GPU clock was not
+  sampled. **Owed: an A/B on the same route from a cool tablet, with `gpu_clock` sampled, this build against
+  apk15** (a plain `-Pnfsmw.applicationIdSuffix=.dev` build).
+- Audio after minimizing (`android: no crackle after minimizing the app`): the rescue freed packets the paused
+  voice still held, and their late ends left the game mixing one packet ahead of the voice, crackly until a
+  restart, sometimes. Fixed; four minimize/restore cycles on the tablet: ring back to 1,875 ends = 1,875
+  submissions per 10 s, 2 packets on nearly every pass; no crackle heard by the owner.
 
 1. **Confirm the two changes above on the tablet**: the core log line, keyboard play and remapping, controller and
    keyboard connected mid-race. Build and install the `.dev` APK, then run
@@ -383,12 +399,10 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
      bloom, motion blur, the road reflection and the rear-view mirror in place; menus and the map usable.
    - Measure 1056x660 against 1024x576 and 1280x720 at 16:9 on the same route (FPS, 95th/99th percentile, GPU
      temperature): 1056x660 is 18 % more pixels than 1024x576 and a clean 2x scale to the screen.
-6. **45 FPS** for the 90 Hz display (half its rate) where 60 does not hold: `nfsmw_limite_fps` allows 30/60/90/120.
+6. **45 FPS**: done (see "Done in this copy").
 7. **Game data in the app's own folder** (`getExternalFilesDir`): no shared-storage overhead while the track
    streams, and no All files access. `MainActivity.GAME_FOLDER_NAME` and `GameActivity` hold the path.
-8. **A build for this SoC**: `-mcpu=cortex-a78` for the game code (both core types are ARMv8.2: LSE atomics, FP16),
-   then PGO from a 15-minute session on the tablet with clang's own profiles (`-fprofile-generate`, then
-   `-fprofile-use`); the PGO code in `app/CMakeLists.txt` and `app/src/nfsmw_pgo.cpp` is the Switch's GCC path and
-   does not apply, and its profiles were removed from this copy.
+8. **A build for this SoC**: done in code (`-Pnfsmw.cpu=exynos1380`, `-Pnfsmw.pgo=generar|usar`; recipe in
+   `docs/building-android.md`); the A/B against the generic build is still owed (see the step 9 notes above).
 9. **Renderer on Mali**: load/store operations (clear or don't-care) and transient depth attachments; confirm with
    Arm Performance Studio (Streamline) counters over adb.

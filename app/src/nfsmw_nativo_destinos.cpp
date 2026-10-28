@@ -331,8 +331,13 @@ REXCVAR_DEFINE_BOOL(nfsmw_nativo_profundidad_perezosa, true, "NFSMW",
  * specialization constant throws away. The guard is the same: if a draw really samples a dropped copy,
  * DIFERENCIA in the log and the lazy depth turns off for the session. Report line: "C2 profundidad perezosa",
  * the "tiradas" figure. false = record it, as before.
+ *
+ * OFF by default. On the tablet the guard tripped on the first race: a draw sampled 08C90000 after its copy had
+ * been dropped (21:02:49, near the start of the race), so the composite is not its only reader after all. The
+ * guard did its job (the lazy depth turned off, copies back to 2.9-3.9 ms) and the owner saw no glitch, but it
+ * saves nothing in the end. Who that reader is, and whether only at the start of a race, is not known yet.
  */
-REXCVAR_DEFINE_BOOL(nfsmw_nativo_profundidad_perezosa_tirar, REX_PLATFORM_ANDROID != 0, "NFSMW",
+REXCVAR_DEFINE_BOOL(nfsmw_nativo_profundidad_perezosa_tirar, false, "NFSMW",
                     "Renderizador nativo (Android): la copia de profundidad aplazada se tira tambien cuando su origen "
                     "se vuelve a escribir antes de que la composicion la pida (su unico lector, que no la usa). "
                     "Misma imagen; se comprueba sola. false = grabarla, como antes");
