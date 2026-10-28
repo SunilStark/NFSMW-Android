@@ -195,6 +195,8 @@ bool CacheEtc::Leer(uint64_t clave, size_t bytes, std::vector<uint8_t>& datos) {
       !fichero.read(reinterpret_cast<char*>(datos.data()), std::streamsize(bytes)) ||
       XXH3_64bits(datos.data(), bytes) != cabecera.huella) {
     REXLOG_WARN("[compatibilidad] ETC2: {} estaba danado: se borra", Ruta(clave).filename().string());
+    // Closed first: Windows does not delete a file that is still open (the PC tests run there).
+    fichero.close();
     Olvidar(clave);
     return false;
   }
