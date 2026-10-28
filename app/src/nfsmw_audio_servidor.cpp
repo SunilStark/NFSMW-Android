@@ -41,6 +41,21 @@
 //  Entering and leaving that mode is logged with the state of the packet
 //  ring and of the voice.
 //
+//  THE STALE ENDS (Android: crackly sound after minimizing, until a restart)
+//  When the app goes to the background, SDL pauses the output and the voice
+//  stops, still holding the packets it was given (state 2). The rescue frees
+//  those slots and the loop mixes new packets into them; when the app comes
+//  back, the voice plays its old queue and reports an end for each of those
+//  stale entries, and sub_825E4358 frees a slot that now holds a newer packet,
+//  queued or about to be. From then on the game mixes into a packet the voice
+//  has not played yet: a click every 5 ms, for the rest of the session. It
+//  depends on what was queued at the moment of the pause, so it does not
+//  happen every time. Now the rescue counts each slot it frees while the voice
+//  still holds it (a stale end owed), and the end hook swallows that many ends
+//  for that slot: it wakes the loop but leaves the slot as it is. At most
+//  kMaxFinesDebidos per slot (the voice's queue), in case the voice drops its
+//  queue instead of playing it. Report: the rescue's exit line.
+//
 //  HOW TO TURN IT OFF WITHOUT A NEW NRO
 //  In nfsmw.toml:   nfsmw_audio_rescate = false
 //
@@ -152,6 +167,7 @@ constexpr int64_t kPlazoRescateMs = 5;
 constexpr int64_t kSinAvanceMs = 250;
 constexpr int64_t kResumenRescateMs = 10000;
 constexpr uint64_t kMaxVolcados = 20;
+constexpr int32_t kMaxFinesDebidos = 4;
 
 uint32_t Leer32(const uint8_t* base, uint32_t direccion) {
   uint32_t v = 0;
@@ -175,6 +191,9 @@ std::atomic<uint64_t> g_pasadas{0};
 std::atomic<uint64_t> g_entregas{0};
 std::atomic<int64_t> g_ultimo_fin_ms{0};
 std::atomic<int64_t> g_ultima_entrega_ms{0};
+// Ends of packet owed for each slot: freed by the rescue while the voice still held it (see THE STALE ENDS).
+std::atomic<int32_t> g_fines_debidos[2]{};
+std::atomic<uint64_t> g_fines_tragados{0};
 
 // nfsmw_audio_diag_anillo: from wakeup to submission. g_despertar_us is written and read by the server thread
 // (its wait and its submission); the summary resets the sums, from the SDK audio thread.
@@ -373,6 +392,7 @@ void EsperarPaqueteServidor(size_t) {
 }  // namespace nfsmw::audio_servidor
 
 REX_EXTERN(__imp__sub_828531E8);
+REX_EXTERN(__imp__sub_828531B8);
 REX_EXTERN(__imp__sub_825E4358);
 REX_EXTERN(__imp__sub_825E4338);
 REX_EXTERN(__imp__sub_82851F00);
@@ -416,6 +436,26 @@ REX_HOOK_RAW(sub_825E4358) {
   using namespace nfsmw::audio_servidor;
   g_fines.fetch_add(1, std::memory_order_relaxed);
   g_ultimo_fin_ms.store(g_reloj_ms(), std::memory_order_relaxed);
+  // r3: the packet's context, {server object, &state[i]} (0x825E4358). A stale end owed for that slot is
+  // swallowed: the loop is woken as the game does, but the slot keeps the newer packet it holds.
+  const uint32_t obj = Leer32(base, ctx.r3.u32);
+  const uint32_t estado = Leer32(base, ctx.r3.u32 + 4);
+  const uint32_t i = (estado - (obj + kOffEstados)) / 4;
+  if (obj != 0 && estado >= obj + kOffEstados && i < 2) {
+    int32_t debidos = g_fines_debidos[i].load(std::memory_order_relaxed);
+    while (debidos > 0 &&
+           !g_fines_debidos[i].compare_exchange_weak(debidos, debidos - 1, std::memory_order_relaxed)) {
+    }
+    if (debidos > 0) {
+      g_fines_tragados.fetch_add(1, std::memory_order_relaxed);
+      const uint32_t evento = Leer32(base, obj + kOffEvento);
+      if (evento != 0) {
+        ctx.r3.u64 = evento;
+        __imp__sub_828531B8(ctx, base);
+      }
+      return;
+    }
+  }
   __imp__sub_825E4358(ctx, base);
 }
 
@@ -539,8 +579,11 @@ REX_HOOK_RAW(sub_828531E8) {
 
     if (r.activo && g_fines.load(std::memory_order_relaxed) != r.fines_al_entrar) {
       REXLOG_INFO("[audio] la voz vuelve a devolver fines de paquete tras {} ms de rescate "
-                  "(paquetes liberados {}, reentregas {})",
-                  ahora - r.desde_ms, r.liberados, r.reentregas);
+                  "(paquetes liberados {}, reentregas {}; fines viejos debidos {}+{}, tragados hasta ahora {})",
+                  ahora - r.desde_ms, r.liberados, r.reentregas,
+                  g_fines_debidos[0].load(std::memory_order_relaxed),
+                  g_fines_debidos[1].load(std::memory_order_relaxed),
+                  g_fines_tragados.load(std::memory_order_relaxed));
       r.activo = false;
     }
 
@@ -571,6 +614,10 @@ REX_HOOK_RAW(sub_828531E8) {
     r.reentregas += Reentregar(ctx, base, obj);
     const uint32_t w = Leer32(base, obj + kOffW) % 2;
     if (Estado(base, obj, w) != kLibre) {
+      if (Estado(base, obj, w) == kEntregado &&
+          g_fines_debidos[w].load(std::memory_order_relaxed) < kMaxFinesDebidos) {
+        g_fines_debidos[w].fetch_add(1, std::memory_order_relaxed);  // the voice still holds it: a stale end
+      }
       Escribir32(base, obj + kOffEstados + 4 * w, kLibre);
       ++r.liberados;
     }
