@@ -5,6 +5,10 @@ Changes in this copy, newest first. Upstream's own history is in
 
 ## Unreleased
 
+- **The GPU's time goes to Android too** (ADPF, Android 15+): each frame's report carries how long the GPU took,
+  so the system can pick the GPU clock for the frame budget. On the tablet the reports are accepted; the clock
+  moved only a little (552 MHz in half the race instead of 39 %).
+
 - **For measuring:** fragments per pixel shader on Mali (precise occlusion queries per draw), `nfsmw_args.txt` in
   the game folder for extra `--cvar=value` arguments, and `tools/android/extraer_spirv.py` to pull the shader
   library's SPIR-V for Arm's offline compiler. Run on the tablet.
