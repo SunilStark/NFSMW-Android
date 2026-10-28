@@ -309,6 +309,11 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
   not readable without root). Next: sample `/sys/kernel/gpu/gpu_clock` and `gpu_busy` during a race; if the load is
   high and the clock low, it is a cap; if the load is low, report the GPU time to ADPF
   (`AWorkDuration_setActualGpuDurationNanos`, API 35) and look for the CPU-GPU waits.
+- Sampled in a race (`out/tablet/reloj_gpu1.txt`, 250 samples, `gpu_clock`/`gpu_busy`/`gpu_tmu` every ~0.4 s): 552
+  MHz 39 %, 455 MHz 48 %, 351 MHz 12 % of the time; the driver's load 85 % on average at every one of them (71-93 %).
+  Never above 552 MHz in either race, even at 90-93 % load; GPU 52-54 C, thermal status 0 then 1. So the clock does
+  not follow the load: either a cap at 552 MHz (Samsung's game service or power profile) or the governor's step-up
+  threshold is above the ~93 % the game reaches. Next: the owner's Samsung performance setting, then sample again.
 
 1. **Confirm the two changes above on the tablet**: the core log line, keyboard play and remapping, controller and
    keyboard connected mid-race. Build and install the `.dev` APK, then run
