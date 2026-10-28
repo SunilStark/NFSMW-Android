@@ -140,6 +140,12 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
   `nfsmw_nativo_bc_a_etc2` (launcher: **Texturas en GPUs sin BC**), `nfsmw_nativo_etc2_cache_mb`,
   `nfsmw_nativo_etc2_hilos`; the SDK now enables `textureCompressionETC2`. Checked off-device (encoder, cache, and
   Mesa's ETC2 decoder against ours on every texel); not yet on the tablet.
+- `android: half precision keeps the shadow map and pow at 32 bits` (step 3 below): `nfsmw_nativo_media_precision`
+  relaxed every result computed from a texture, the shadow map too, which the game samples as an ordinary texture
+  and compares with the pixel's depth (at 16 bits, steps of 0.0005 near 1.0: shadow acne). Now its samples, found by
+  tfetch2DSombraMin's marker, stay at 32 bits, and so do pow/exp/log with what feeds them; a shader whose shadow
+  samples cannot be found is left alone. Launcher: **Precisión del color**. Tested on glslang-compiled shaders
+  shaped like the library's (`tools/tests/spirv_precision_test.cpp`; spirv-val passes); not yet on the tablet.
 
 ## Next, in order (each measured on the tablet before and after)
 
@@ -163,8 +169,19 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
      ... MB`). Watch that `convertidas al momento` stays near 0 (it is ring time) and how fast the cache fills.
    - The OpenGL ES backend still decodes BC (its own path in `app/src/nfsmw_nativo_dibujos_gles.cpp`); if the tablet
      ends up on GLES, port the same lookup there.
-3. **Half precision**: try `nfsmw_nativo_media_precision = true` (off by default; RelaxedPrecision in the pixel
-   shaders), and look for banding or glitches in a full race.
+3. **Try half precision on the tablet** (the pass is fixed, see "Done"): launcher **Precisión del color → 16
+   bits**, both backends. It changes the shaders, so the first race after switching compiles pipelines: play one
+   race before measuring.
+   - The log: `[nativo] C5a: media precision en N pixel shaders (M resultados a 16 bits). A 32 bits: S muestras del
+     mapa de sombras en K shaders, P pow/exp/log...`. K must be above 0 (the library's world shaders sample the
+     shadow map); `sin tocar` counts shaders left at 32 bits because their shadow samples could not be told apart.
+     If that number is large, the library's SPIR-V has a shape `tools/tests/spirv_precision_test.cpp` lacks: dump
+     one such shader and add it to the fixture.
+   - Look in a full race, day and night routes, for: shadow acne or stripes on roads and walls, blocky or
+     shimmering shadow edges, banding in car paint highlights and reflections, in the sky and in fog, wrong bloom
+     or motion blur, and the HUD. Compare screenshots at the same spot against **32 bits**.
+   - Measure both on the same route: FPS, 95th/99th percentile frame times, temperature after 15 minutes. Keep 16
+     bits only if it is faster and nothing above shows.
 4. **ADPF and thermals**: an `APerformanceHint` session (API 33+) for the game, ring and render threads with the
    frame budget, and `AThermal_getThermalHeadroom` to step down (resolution, shadows) before the tablet throttles;
    this can replace the hard pinning of `android_rendimiento.cpp` if it measures better.

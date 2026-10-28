@@ -111,7 +111,10 @@ clang++ -std=c++17 tools/tests/android_nucleos_test.cpp -o out/android_nucleos_t
 # BC to ETC2/EAC: every block decodes to the encoder's own error, every mode is used, quality and speed
 clang++ -std=c++20 -O2 tools/tests/texturas_etc_test.cpp -o out/texturas_etc_test.exe; out/texturas_etc_test.exe
 
-# its disk cache (needs sdk/thirdparty from step 1, for fmt and xxHash)
+# half precision: which results go to 16 bits (shadow map and pow stay at 32)
+clang++ -std=c++20 -O1 tools/tests/spirv_precision_test.cpp -o out/spirv_precision_test.exe; out/spirv_precision_test.exe
+
+# the ETC2 disk cache (needs sdk/thirdparty from step 1, for fmt and xxHash)
 clang++ -std=c++20 -O2 -DFMT_HEADER_ONLY -Itools/tests/rex_minimo -Isdk/thirdparty/fmt/include -Isdk/thirdparty/xxHash tools/tests/texturas_cache_etc_test.cpp -o out/texturas_cache_etc_test.exe; out/texturas_cache_etc_test.exe
 ```
 

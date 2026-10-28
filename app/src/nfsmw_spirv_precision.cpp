@@ -3,12 +3,24 @@
 #include "nfsmw_spirv_precision.h"
 
 #include <algorithm>
+#include <cstring>
 
 namespace nfsmw::nativo {
 namespace {
 
 // SPIR-V opcodes, decorations and enumerants used here (spirv.hpp).
+constexpr uint32_t kOpExtInstImport = 11;
 constexpr uint32_t kOpExtInst = 12;
+constexpr uint32_t kOpConstant = 43;
+constexpr uint32_t kOpSpecConstantOp = 52;
+constexpr uint32_t kOpIEqual = 170;
+constexpr uint32_t kOpINotEqual = 171;
+constexpr uint32_t kOpLabel = 248;
+constexpr uint32_t kOpBranch = 249;
+constexpr uint32_t kOpBranchConditional = 250;
+constexpr uint32_t kOpSelectionMerge = 247;
+constexpr uint32_t kOpLine = 8;
+constexpr uint32_t kOpNoLine = 317;
 constexpr uint32_t kOpTypeFloat = 22;
 constexpr uint32_t kOpTypeVector = 23;
 constexpr uint32_t kOpStore = 62;
@@ -46,6 +58,11 @@ constexpr uint32_t kDecorationRelaxedPrecision = 0;
 constexpr uint32_t kDecorationBuiltIn = 11;
 constexpr uint32_t kBuiltInFragDepth = 22;
 constexpr uint32_t kMaxBound = 1u << 22;
+// NFSMW_MARCA_SOMBRA_MINIMO (shaders/XenosRecomp/shader_common.h): the value tfetch2DSombraMin compares the
+// specialization constant with. Nothing else in the library has it.
+constexpr uint32_t kMarcaSombra = 0x5E3B1A84u;
+// GLSL.std.450 Pow, Exp, Log, Exp2 and Log2.
+bool EsPotencia(uint32_t instruccion) { return instruccion >= 26 && instruccion <= 30; }
 
 bool EsMuestreo(uint32_t op) { return op >= kOpImageSampleImplicitLod && op <= kOpImageDrefGather; }
 bool EsDeReferencia(uint32_t op) {
@@ -99,7 +116,10 @@ void Operandos(const uint32_t* w, uint32_t n, uint32_t op, std::vector<uint32_t>
 
 }  // namespace
 
-uint32_t RelajarPrecision(std::vector<uint32_t>& spirv) {
+uint32_t RelajarPrecision(std::vector<uint32_t>& spirv, InformePrecision* informe) {
+  InformePrecision propio;
+  InformePrecision& info = informe ? *informe : propio;
+  info = {};
   if (spirv.size() < 5 || spirv[0] != 0x07230203u || spirv[3] == 0 || spirv[3] > kMaxBound) {
     return 0;
   }
@@ -123,9 +143,17 @@ uint32_t RelajarPrecision(std::vector<uint32_t>& spirv) {
   std::vector<uint8_t> ya_relajado(limite, 0);
   std::vector<uint8_t> profundidad(limite, 0);  // FragDepth variables
   std::vector<uint32_t> tipo_de(limite, 0);     // result type of each result id
+  std::vector<uint8_t> marca(limite, 0);        // the shadow marker constant, then the conditions on it
+  uint32_t glsl = UINT32_MAX;                   // the GLSL.std.450 import
   size_t donde_insertar = 0;
   for (const Instr& in : instrucciones) {
     const uint32_t* w = spirv.data() + in.pos;
+    if (in.op == kOpExtInstImport && in.n >= 5 && w[1] < limite &&
+        std::memcmp(w + 2, "GLSL.std.450", 12) == 0) {
+      glsl = w[1];
+    } else if (in.op == kOpConstant && in.n == 4 && w[2] < limite && w[3] == kMarcaSombra) {
+      marca[w[2]] = 1;
+    }
     if (in.op == kOpTypeFloat && in.n >= 3 && w[2] == 32 && w[1] < limite) {
       flotante[w[1]] = 1;
     } else if (in.op == kOpTypeVector && in.n >= 4 && w[1] < limite && w[2] < limite && flotante[w[2]]) {
@@ -156,10 +184,110 @@ uint32_t RelajarPrecision(std::vector<uint32_t>& spirv) {
       }
     }
   }
-  // Sources: what a texture sample gives.
+  // The shadow map's samples: those that reach the value tfetch2DSombraMin returns when its marker test fails.
+  // The test (specialization constant == marker, as OpIEqual or OpSpecConstantOp) picks between float4(0) and
+  // the sampled value, through an OpSelect or through a branch: then the block that returns 0 (the marker side)
+  // ends in a jump to where the function's result is merged, and every OpPhi with an edge from that block merges
+  // the shadow value. condicion: 1 = true when equal to the marker, 2 = true when not equal.
+  std::vector<uint8_t> condicion(limite, 0);
+  bool hay_marca = false;
   for (const Instr& in : instrucciones) {
     const uint32_t* w = spirv.data() + in.pos;
-    if (EsMuestreo(in.op) && in.n >= 3 && w[2] < limite && flotante[w[1] < limite ? w[1] : 0]) {
+    const bool comparacion = (in.op == kOpIEqual || in.op == kOpINotEqual) && in.n >= 5;
+    const bool constante = in.op == kOpSpecConstantOp && in.n >= 6 && (w[3] == kOpIEqual || w[3] == kOpINotEqual);
+    if ((comparacion || constante) && w[2] < limite) {
+      const uint32_t a = w[comparacion ? 3 : 4], b = w[comparacion ? 4 : 5];
+      if ((a < limite && marca[a]) || (b < limite && marca[b])) {
+        condicion[w[2]] = (comparacion ? in.op : w[3]) == kOpIEqual ? 1 : 2;
+        hay_marca = true;
+      }
+    }
+  }
+  info.marca_sombra = hay_marca;
+  std::vector<uint32_t> raices;
+  uint32_t sitios = 0;  // marker tests: one per shadow map fetch
+  if (hay_marca) {
+    // The marker side's blocks, and the blocks they jump straight to when they hold nothing but the jump. When the
+    // marker side jumps straight into the merge block, its edge comes from the branch's own block: (block, target).
+    std::vector<uint8_t> lado_marca(limite, 0);
+    std::vector<std::pair<uint32_t, uint32_t>> aristas;
+    uint32_t bloque = UINT32_MAX;
+    for (const Instr& in : instrucciones) {
+      const uint32_t* w = spirv.data() + in.pos;
+      if (in.op == kOpLabel && in.n >= 2) {
+        bloque = w[1];
+      } else if (in.op == kOpSelect && in.n >= 6 && w[3] < limite && condicion[w[3]]) {
+        raices.push_back(w[4]);
+        raices.push_back(w[5]);
+        ++sitios;
+      } else if (in.op == kOpBranchConditional && in.n >= 4 && w[1] < limite && condicion[w[1]]) {
+        ++sitios;
+        const uint32_t destino = condicion[w[1]] == 1 ? w[2] : w[3];
+        if (destino < limite) lado_marca[destino] = 1;
+        aristas.emplace_back(bloque, destino);
+      }
+    }
+    for (int pasada = 0; pasada < 4; ++pasada) {
+      for (size_t i = 0; i + 1 < instrucciones.size(); ++i) {
+        const uint32_t* w = spirv.data() + instrucciones[i].pos;
+        const uint32_t* siguiente = spirv.data() + instrucciones[i + 1].pos;
+        if (instrucciones[i].op == kOpLabel && instrucciones[i].n >= 2 && w[1] < limite && lado_marca[w[1]] &&
+            instrucciones[i + 1].op == kOpBranch && instrucciones[i + 1].n >= 2 && siguiente[1] < limite) {
+          lado_marca[siguiente[1]] = 1;
+        }
+      }
+    }
+    bloque = UINT32_MAX;
+    for (const Instr& in : instrucciones) {
+      const uint32_t* w = spirv.data() + in.pos;
+      if (in.op == kOpLabel && in.n >= 2) {
+        bloque = w[1];
+      }
+      if (in.op != kOpPhi) continue;
+      bool del_lado = false;
+      for (uint32_t k = 4; k < in.n; k += 2) {
+        del_lado = del_lado || (w[k] < limite && lado_marca[w[k]]) ||
+                   std::find(aristas.begin(), aristas.end(), std::make_pair(w[k], bloque)) != aristas.end();
+      }
+      if (del_lado) {
+        for (uint32_t k = 3; k + 1 < in.n; k += 2) raices.push_back(w[k]);
+      }
+    }
+  }
+  // Definition of every value-producing instruction, to walk back from the roots.
+  std::vector<uint32_t> definicion(limite, UINT32_MAX);
+  for (uint32_t i = 0; i < instrucciones.size(); ++i) {
+    const uint32_t* w = spirv.data() + instrucciones[i].pos;
+    if (instrucciones[i].n >= 3 && w[2] < limite && tipo_de[w[2]]) {
+      definicion[w[2]] = i;
+    }
+  }
+  std::vector<uint8_t> sombra(limite, 0);  // shadow map samples, and the ids already walked
+  while (!raices.empty()) {
+    const uint32_t id = raices.back();
+    raices.pop_back();
+    if (id >= limite || sombra[id] || definicion[id] == UINT32_MAX) {
+      continue;
+    }
+    sombra[id] = 1;
+    const Instr& in = instrucciones[definicion[id]];
+    if (EsMuestreo(in.op)) {
+      ++info.muestras_sombra;
+      continue;
+    }
+    Operandos(spirv.data() + in.pos, in.n, in.op, ids);
+    raices.insert(raices.end(), ids.begin(), ids.end());
+  }
+  // Shadow map fetches whose samples could not all be told apart (fewer samples than fetches): the shader is
+  // left at 32 bits.
+  if (hay_marca && info.muestras_sombra < std::max(sitios, 1u)) {
+    info.sin_resolver = true;
+    return 0;
+  }
+  // Sources: what a texture sample gives, but the shadow map.
+  for (const Instr& in : instrucciones) {
+    const uint32_t* w = spirv.data() + in.pos;
+    if (EsMuestreo(in.op) && in.n >= 3 && w[2] < limite && flotante[w[1] < limite ? w[1] : 0] && !sombra[w[2]]) {
       relajado[w[2]] = 1;
     }
   }
@@ -199,14 +327,10 @@ uint32_t RelajarPrecision(std::vector<uint32_t>& spirv) {
       }
     } else if (in.op == kOpStore && in.n >= 3 && w[1] < limite && profundidad[w[1]]) {
       pendientes.push_back(w[2]);
-    }
-  }
-  // Definition of each relaxed id, to walk back from it.
-  std::vector<uint32_t> definicion(limite, UINT32_MAX);
-  for (uint32_t i = 0; i < instrucciones.size(); ++i) {
-    const uint32_t* w = spirv.data() + instrucciones[i].pos;
-    if (instrucciones[i].n >= 3 && w[2] < limite && relajado[w[2]]) {
-      definicion[w[2]] = i;
+    } else if (in.op == kOpExtInst && in.n >= 5 && w[3] == glsl && EsPotencia(w[4]) && w[2] < limite &&
+               relajado[w[2]]) {
+      pendientes.push_back(w[2]);  // the result and, below, what feeds it
+      ++info.potencias;
     }
   }
   while (!pendientes.empty()) {
@@ -240,6 +364,7 @@ uint32_t RelajarPrecision(std::vector<uint32_t>& spirv) {
   if (marcados) {
     spirv.insert(spirv.begin() + ptrdiff_t(donde_insertar), decoraciones.begin(), decoraciones.end());
   }
+  info.marcados = marcados;
   return marcados;
 }
 

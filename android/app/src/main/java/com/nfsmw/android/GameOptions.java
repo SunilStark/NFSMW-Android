@@ -62,6 +62,11 @@ final class GameOptions {
             new Option("etc2", "Texturas en GPUs sin BC", "nfsmw_nativo_bc_a_etc2", "true",
                     new String[] {"true", "false"},
                     new String[] {"ETC2 · menos memoria y ancho de banda (Vulkan)", "Descomprimidas · como antes"}),
+            // The pixel shaders' color math at 16 bits (nfsmw_nativo_media_precision): Mali and Adreno do twice the
+            // arithmetic per cycle. The shadow map, specular pow and texture coordinates stay at 32 bits.
+            new Option("half_precision", "Precisión del color", "nfsmw_nativo_media_precision", "false",
+                    new String[] {"false", "true"},
+                    new String[] {"32 bits · como siempre", "16 bits · más rápido en Mali (prueba)"}),
             new Option(RESOLUTION, "Resolución interna", "nfsmw_resolucion_interna", "1280x720",
                     new String[] {"640x360", "1024x576", "1280x720", "1920x1080"},
                     new String[] {"640x360 · máximo rendimiento", "1024x576 · rendimiento", "1280x720 · equilibrado",

@@ -36,7 +36,8 @@ REXCVAR_DEFINE_BOOL(nfsmw_nativo_media_precision, false, "NFSMW",
                     "Renderizador nativo (Vulkan y OpenGL ES, prueba): el color de los pixel shaders a 16 bits "
                     "(RelaxedPrecision; mediump en GLES). Mali y Adreno hacen el doble de cuentas por ciclo; las "
                     "coordenadas de textura, la profundidad y lo que no sale de una textura siguen a 32 bits. Puede "
-                    "dar bandas en algun efecto: apagado hasta probarlo en el movil")
+                    "dar bandas en algun efecto: apagado hasta probarlo en el movil. El mapa de sombras y pow/exp/log "
+                    "con lo que les llega siguen a 32 bits")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 namespace nfsmw::nativo {
@@ -295,17 +296,37 @@ bool ShadersNativos::Cargar(const std::filesystem::path& archivo) {
   // nfsmw_nativo_media_precision: the pixel shaders' color math at 16 bits, for both renderers (see
   // nfsmw_spirv_precision.h). Before anything reads the SPIR-V.
   if (REXCVAR_GET(nfsmw_nativo_media_precision)) {
-    uint32_t shaders_tocados = 0;
-    uint64_t resultados = 0;
+    uint32_t shaders_tocados = 0, con_sombra = 0, sin_marca = 0, sin_resolver = 0;
+    uint64_t resultados = 0, muestras_sombra = 0, potencias = 0;
     for (native::Shader& s : d.biblioteca.shaders_para_ajustar()) {
-      if (!s.vertices) {
-        const uint32_t marcados = RelajarPrecision(s.spirv);
-        shaders_tocados += marcados ? 1 : 0;
-        resultados += marcados;
+      if (s.vertices) {
+        continue;
       }
+      // A library from before tfetch2DSombraMin has no marker to find the shadow map's samples by: its shaders that
+      // sample the shadow map stay at 32 bits.
+      EntradaShader e;
+      if (!Leer(s, e) && !TieneMarcaSombraMinimo(s.spirv) &&
+          std::any_of(e.samplers.begin(), e.samplers.end(), [](const SamplerShader& m) { return m.mapa_sombras; })) {
+        ++sin_marca;
+        continue;
+      }
+      InformePrecision informe;
+      const uint32_t marcados = RelajarPrecision(s.spirv, &informe);
+      shaders_tocados += marcados ? 1 : 0;
+      resultados += marcados;
+      con_sombra += informe.marca_sombra && !informe.sin_resolver ? 1 : 0;
+      sin_resolver += informe.sin_resolver ? 1 : 0;
+      muestras_sombra += informe.muestras_sombra;
+      potencias += informe.potencias;
     }
-    REXLOG_INFO("[nativo] C5a: media precision en {} pixel shaders ({} resultados a 16 bits)", shaders_tocados,
-                resultados);
+    REXLOG_INFO("[nativo] C5a: media precision en {} pixel shaders ({} resultados a 16 bits). A 32 bits: {} muestras "
+                "del mapa de sombras en {} shaders, {} pow/exp/log con lo que les llega{}",
+                shaders_tocados, resultados, muestras_sombra, con_sombra, potencias,
+                (sin_marca ? fmt::format("; {} shaders con mapa de sombras y biblioteca sin marca, sin tocar", sin_marca)
+                           : std::string()) +
+                    (sin_resolver ? fmt::format("; {} shaders cuyas muestras de sombra no se distinguen, sin tocar",
+                                                sin_resolver)
+                                  : std::string()));
   }
   const auto& shaders = d.biblioteca.shaders();
   uint32_t con_kill = 0, sin_kill = 0;

@@ -5,6 +5,10 @@ Changes in this copy, newest first. Upstream's own history is in
 
 ## Unreleased
 
+- **Half precision fixed for shadows and highlights.** The 16-bit color math (`nfsmw_nativo_media_precision`, off by
+  default) also relaxed the shadow map, which holds depth: shadow acne. Its samples, and pow/exp/log with what feeds
+  them, now stay at 32 bits. Launcher: **Precisión del color**. Tested on compiled shaders off-device; not yet on
+  the tablet.
 - **ETC2 textures on GPUs without BC** (Mali, PowerVR; Vulkan). The game's BC1-5 textures stay compressed as ETC2
   RGB8A1, ETC2 RGBA8 and EAC R11/RG11, the size of BC, instead of being decoded to 4 bytes a texel (2 for BC1). They
   are transcoded in the background on the cores the game does not use and kept in a disk cache: the first time a
