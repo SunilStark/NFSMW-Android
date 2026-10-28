@@ -5,7 +5,8 @@
 - This page explains how the game's Xbox 360 code becomes a Switch program (an [NRO](glossary.md#nro)), and the
   compiler options that make it faster.
 - Almost all of it works the same for any other game built with [ReXGlue](glossary.md#rexglue) for the Switch.
-- For the exact commands, see [building.md](building.md). This page explains what those commands do and why.
+- For the Android build's commands, see [building-android.md](building-android.md). This page explains what the
+  steps do and why; its PGO and NRO parts are the Switch port's.
 
 ## The path from the game to the NRO
 
@@ -195,6 +196,6 @@ against 1,743).
 ## Rebuilding the Vulkan driver
 
 The NRO includes Mesa, taken from an SDK folder on your PC (see [mesa.md](mesa.md) and
-[mesa/README.md](../mesa/README.md)). After you install a new build of the driver, **delete the linked program**
+`mesa/README.md` in [nfsmw-nx](https://github.com/StevensND/nfsmw-nx)). After you install a new build of the driver, **delete the linked program**
 before you build the NRO. Ninja does not watch that library, so it says "no work to do" and packs the old driver.
 Check that the new code is really in the program, for example by looking for a text that only the new code has.

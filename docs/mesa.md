@@ -8,9 +8,9 @@
 - It runs on the Switch thanks to [danfromtico/mesa-switch](https://github.com/danfromtico/mesa-switch), which adds
   the Switch-specific part (it talks to the Switch's GPU driver: channels, memory through NvMap, fences) and builds one
   library, `libvulkan.a`, for homebrew programs. That library, with NAK inside, is included in the NRO.
-- Everything this port changed is in one file, [mesa/mesa-switch-nfsmw.patch](../mesa/mesa-switch-nfsmw.patch),
+- Everything this port changed is in one file, `mesa/mesa-switch-nfsmw.patch` in [nfsmw-nx](https://github.com/StevensND/nfsmw-nx),
   made against commit `1a8c1a66d6f` of mesa-switch.
-- This page explains why each change was made and what it gained. [mesa/README.md](../mesa/README.md) has the steps to
+- This page explains why each change was made and what it gained. `mesa/README.md` in [nfsmw-nx](https://github.com/StevensND/nfsmw-nx) has the steps to
   get the source, the list of files and how to rebuild.
 
 ## Building Mesa for the Switch on Windows

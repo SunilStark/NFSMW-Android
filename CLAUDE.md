@@ -7,6 +7,10 @@ The goal is a steady **60 FPS first, then resolution**.
 
 Remotes: `origin` is this repository (`SunilStark/NFSMW-Android`); add the original as `upstream`
 (`git remote add upstream https://github.com/codepdbh/nfsmw-android`) and merge `upstream/main` to take its changes.
+This copy removed upstream's Switch build files (`pgo/`, `mesa/`, `tools/switch/`, `tools/build.ps1`), its release
+notes and planning docs, and replaced `README.md` and `CHANGELOG.md`. A merge that touches those files stops with
+modify/delete or content conflicts: keep this copy's side (`git rm` the deleted ones), and move anything useful from
+upstream's release notes into `CHANGELOG.md` under an "Upstream" line.
 
 ## Rules
 
@@ -49,12 +53,14 @@ Install, and check each with `--version` or its path:
   for in `android/app/build.gradle`). `ANDROID_HOME` set, or the SDK at `%LOCALAPPDATA%\Android\Sdk`.
 - JDK 17 or later (Android Studio's `jbr` works; `build_android.ps1` finds it).
 - Python 3.10+, Git with Git Bash (for `tools/codegen.sh`), and for the code generator on the PC: LLVM clang 20 or
-  later, CMake 3.25+ and **one** Ninja (see `docs/toolchain.md`, "CMake on Windows": run CMake from PowerShell, and
-  long builds with `Start-Process` and a log file).
+  later, CMake 3.25+ and **one** Ninja (see the three CMake traps in `docs/building-android.md`: run CMake from
+  PowerShell, and long builds with `Start-Process` and a log file).
 - About 16 GB of RAM: the generated code is about 144 MB of C++, and the ThinLTO link is heavy. If the link runs out
   of memory, lower `--thinlto-jobs` in `android/app/src/main/cpp/CMakeLists.txt`.
 
 ## Build, from a fresh clone
+
+The same steps, with more detail, are in `docs/building-android.md`; keep both in step when one changes.
 
 1. **Third-party sources** (the SDK's `sdk/thirdparty` only holds the files this port changed):
    `python tools/fetch_thirdparty.py --cache-dir out/evolved2/dependency-cache`
@@ -102,7 +108,7 @@ adb shell dumpsys thermalservice | Select-String -Context 0,4 'Current temperatu
 Record the average FPS, the 95th/99th percentile frame times, the temperature after 15 minutes and the battery drain
 per hour, before and after each change.
 
-Asset-free tests (no game needed): the commands at the end of `docs/EVOLVED_2_BUILD_GUIDE.md`
+Asset-free tests (no game needed): the commands at the end of `docs/building-android.md`
 (`SaveArchiveTest`, `GraphicsPresetsTest`, `KeyboardBindingsTest`, `tools/tests/android_nucleos_test.cpp`).
 
 ## Starting settings for the tablet
@@ -121,6 +127,9 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
   as SDL's own, the launcher's TECLADO section (`KeyboardBindings.java`), touch controls hidden while the keyboard
   plays. Compiled and tested off-device, not yet on the tablet.
 - The `.dev` package suffix, `build_android.ps1` passing its arguments to Gradle, and the manual-only workflow.
+- Cleanup: this copy's own `README.md`, `CHANGELOG.md` and `docs/building-android.md`; upstream's Switch build files
+  and release/planning docs removed. The Switch background docs (`docs/platform-notes.md`, `mesa.md`, `editions.md`,
+  `performance-history.md`, `audio-and-video.md`) stay because comments in `sdk/` and `app/` point at them.
 
 ## Next, in order (each measured on the tablet before and after)
 
@@ -141,7 +150,8 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
 7. **Game data in the app's own folder** (`getExternalFilesDir`): no shared-storage overhead while the track
    streams, and no All files access. `MainActivity.GAME_FOLDER_NAME` and `GameActivity` hold the path.
 8. **A build for this SoC**: `-mcpu=cortex-a78` for the game code (both core types are ARMv8.2: LSE atomics, FP16),
-   then PGO from a 15-minute session on the tablet (`docs/EVOLVED_2_PERFORMANCE.md`: the `pgo/` profiles are the
-   Switch's GCC ones and do not apply).
+   then PGO from a 15-minute session on the tablet with clang's own profiles (`-fprofile-generate`, then
+   `-fprofile-use`); the PGO code in `app/CMakeLists.txt` and `app/src/nfsmw_pgo.cpp` is the Switch's GCC path and
+   does not apply, and its profiles were removed from this copy.
 9. **Renderer on Mali**: load/store operations (clear or don't-care) and transient depth attachments; confirm with
    Arm Performance Studio (Streamline) counters over adb.

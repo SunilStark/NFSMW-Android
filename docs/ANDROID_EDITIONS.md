@@ -12,7 +12,7 @@ GPL-3.0. El código regional está en `tools/editions/regional/`; no sustituye n
 
 ## Preparar PAL
 
-Necesitas Python 3.11 o posterior. Primero completa la [preparación normal del proyecto](EVOLVED_2_BUILD_GUIDE.md): dependencias, generador host,
+Necesitas Python 3.11 o posterior. Primero completa la [preparación normal del proyecto](building-android.md): dependencias, generador host,
 `assets/game_root/default.xex`, fuentes generadas y copias literales. Después, desde la raíz:
 
 ```powershell

@@ -195,7 +195,7 @@ how that driver behaves on the console:
   entries, not by megabytes. Its size setting, `NOUVEAU_HORIZON_BO_CACHE_MB`, is 128 MB by default.
 - **Driver options are environment variables.** The driver reads them with `getenv` when the Vulkan instance and the
   devices are created, so they must be set before creating the instance. In this port you write them in the setting
-  `nfsmw_mesa_entorno` of `nfsmw.toml` (see [mesa/README.md](../mesa/README.md)). Useful ones:
+  `nfsmw_mesa_entorno` of `nfsmw.toml` (see `mesa/README.md` in [nfsmw-nx](https://github.com/StevensND/nfsmw-nx)). Useful ones:
   `MESA_SHADER_CACHE_DISABLE` (turns off the shader cache on the SD card, below), `NVK_SWITCH_PERF_LOG` (counters and
   timers of the driver's Horizon code, for diagnostics), `NVK_SWITCH_CPU_WRITE_MEM_UNCACHED` (whether memory the CPU
   only writes to skips the CPU cache; on by default) and `NOUVEAU_HORIZON_BO_CACHE_MB`.
@@ -204,7 +204,7 @@ how that driver behaves on the console:
   threads with 8 MB stacks. If the application keeps its own [pipeline cache](glossary.md#pipeline-cache)
   (`VkPipelineCache`), the disk cache only duplicates it: turn it off with `MESA_SHADER_CACHE_DISABLE`. This port
   turns it off by default (setting `nfsmw_mesa_cache_disco`). Both caches are thrown away when the compiler revision
-  in the driver's compiler flags changes (the number in `nvk_shader.c`, see [mesa/README.md](../mesa/README.md)).
+  in the driver's compiler flags changes (the number in `nvk_shader.c`, see `mesa/README.md` in [nfsmw-nx](https://github.com/StevensND/nfsmw-nx)).
 - **Creating a pipeline is slow.** (A [pipeline](glossary.md#pipeline) is the shaders and GPU state of a draw,
   compiled together.) Without a cache it took about 59 ms per pipeline on the console: 112 pipelines in 6.6 s. Save a
   `VkPipelineCache` and, on top of it, a list of the pipelines the game uses, so they can be created on a background

@@ -2,8 +2,9 @@
 
 This folder has the shader translator and the tools around it. Look here to rebuild the shader library, or to find
 the code of one step of the translation. How the translation works, and why, is in
-[docs/shaders.md](../docs/shaders.md). The command to rebuild the library on a PC is in step 7 of
-[docs/building.md](../docs/building.md).
+[docs/shaders.md](../docs/shaders.md). The app builds the library on the tablet, from the disc, with
+the WebAssembly builds of these tools (made by `wasm/`; the app carries them in
+`android/app/src/main/assets/shaders/wasm`).
 
 The game's [shaders](../docs/glossary.md#shader) (the small programs the GPU runs) are Xbox 360
 ([Xenos](../docs/glossary.md#xenos)) [microcode](../docs/glossary.md#microcode). They are stored in containers (the
