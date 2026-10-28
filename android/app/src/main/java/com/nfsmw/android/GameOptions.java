@@ -135,10 +135,12 @@ final class GameOptions {
                     new String[] {"true", "false"},
                     new String[] {"On", "Off · more performance"}),
             // How the shadow map is sampled (nfsmw_nativo_pcf_barato): one texel gives blocky, stair-stepped shadow
-            // edges (seen on the car's paint on the tablet); the 3x3 filter smooths them. Up to ~2 ms of GPU.
-            new Option("shadow_edges", "Shadow edges", "nfsmw_nativo_pcf_barato", "true",
-                    new String[] {"true", "false"},
-                    new String[] {"Sharp · blocky edges, fastest", "Smooth · filtered edges, a little slower"}),
+            // edges (seen on the car's paint on the tablet); the 3x3 filter smooths them, up to ~2 ms of GPU over
+            // the whole frame. "coches" (arguments() adds nfsmw_nativo_pcf_suave_coches): 3x3 on the cars only.
+            new Option("shadow_edges", "Shadow edges", "nfsmw_nativo_pcf_barato", "coches",
+                    new String[] {"coches", "true", "false"},
+                    new String[] {"Smooth on cars · sharp elsewhere", "Sharp everywhere · fastest",
+                            "Smooth everywhere · a little slower"}),
             // The game's own "visual treatment": its yellow tint, desaturation and vignette (nfsmw_tratamiento_visual).
             // Off brightens the city a lot; no cost either way.
             new Option("color_filter", "Game color filter", "nfsmw_tratamiento_visual", "original",
@@ -222,6 +224,11 @@ final class GameOptions {
             String value = get(context, o.key);
             if (o.key.equals(ASPECT) && SCREEN_ASPECT.equals(value)) {
                 value = screenAspect(context);
+            }
+            if (o.key.equals("shadow_edges")) {
+                args.add("--nfsmw_nativo_pcf_barato=" + ("false".equals(value) ? "false" : "true"));
+                args.add("--nfsmw_nativo_pcf_suave_coches=" + ("coches".equals(value) ? "true" : "false"));
+                continue;
             }
             if (o.key.equals("shadows") && "off".equals(value)) {
                 args.add("--nfsmw_sombras_cada=1");

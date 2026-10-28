@@ -786,6 +786,21 @@ REXCVAR_DEFINE_BOOL(nfsmw_nativo_enviar_tras_sombras, false, "NFSMW",
                     "Renderizador nativo (20/09): enviar el trabajo a la GPU en cuanto se cierra el pase de "
                     "sombras, en vez de todo junto al final del fotograma. La GPU deja de estar parada "
                     "esperando a que la CPU acabe de grabar");
+/*
+ * Smooth shadows on the cars only (nfsmw_nativo_pcf_suave_coches).
+ *
+ * With the single shadow map sample (nfsmw_nativo_pcf_barato) the shadow edges are blocks: on the tablet a
+ * stair-stepped shadow crossed the player's car's paint, close to the camera and in plain view. The 3x3 filter
+ * smooths them but costs up to ~2 ms over the whole frame (25.1 -> 27.3 ms on the console, with the blur). The
+ * cars are a small part of the screen, so they get the 3x3 and the city keeps the single sample. A car draw is
+ * one that samples a cube texture: the car's environment map, which the paint, chrome and glass read and the
+ * city does not. false = the same filter everywhere.
+ */
+REXCVAR_DEFINE_BOOL(nfsmw_nativo_pcf_suave_coches, true, "NFSMW",
+                    "Con nfsmw_nativo_pcf_barato: los coches (los dibujos que muestrean el mapa de entorno, una "
+                    "textura cubo) siguen con el filtro 3x3 de la sombra, bordes suaves; la ciudad, con una sola "
+                    "muestra. false = el mismo filtro en todo")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 REXCVAR_DEFINE_INT32(nfsmw_nativo_pcf_barato_alternar_s, 0, "NFSMW",
                      "Renderizador nativo (20/09): con N > 0 alterna cada N segundos el muestreo del mapa de "
                      "sombras entre el patron 3x3 y un solo texel, y lo anota. Sirve para medirlo A/B en la "
@@ -2827,12 +2842,18 @@ class DibujosVulkanImpl final : public DibujosVulkan {
       contexto_->LecturasDeProfundidadMuertas(true);
     }
     bool lee_reflejo = false;  // nfsmw_reflejo_visibilidad
+    bool muestrea_cubo = false;  // nfsmw_nativo_pcf_suave_coches
     for (const SamplerShader& sampler :
          ps ? std::span<const SamplerShader>(ps->samplers) : std::span<const SamplerShader>()) {
       if (sampler.registro >= 16) {
         continue;
       }
       const uint32_t* fetch = r + kRegFetch + uint32_t(sampler.registro) * 6;
+      // A cube texture is the car's environment map: paint, chrome and glass sample it; the city does not.
+      if ((fetch[0] & 0x3) == uint32_t(xenos::FetchConstantType::kTexture) &&
+          ((fetch[5] >> 9) & 0x3) == uint32_t(xenos::DataDimension::kCube)) {
+        muestrea_cubo = true;
+      }
       // nfsmw_reflejo_visibilidad. Here and not in TexturaResuelta, which, because of the caches, only sees
       // the first draw of each frame that samples it. Without checking the dimension: over-counting only
       // means the reflection gets drawn.
@@ -3293,7 +3314,8 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     if (inv_tamano_tex_) {
       especializacion |= kSpecInvTamanoTex;
     }
-    if (pcf_barato_) {
+    // nfsmw_nativo_pcf_suave_coches: the cars keep the 3x3 filter, the city the single sample.
+    if (pcf_barato_ && !(muestrea_cubo && pcf_suave_coches_)) {
       especializacion |= kSpecPcfBarato;
     }
     if (solo_alfa && ps) {
@@ -13256,6 +13278,7 @@ class DibujosVulkanImpl final : public DibujosVulkan {
   bool alternancia_solo_alfa_anotada_ = false;
   bool inv_tamano_tex_ = false;
   bool pcf_barato_ = false;                    // a single shadow map sample
+  bool pcf_suave_coches_ = REXCVAR_GET(nfsmw_nativo_pcf_suave_coches);  // except on the cars
   bool pase_coches_sombra_ = false;            // nfsmw_nativo_sombra_minimo, car pass
   bool sin_desenfoque_fotograma_ = true;       // nfsmw_nativo_sin_desenfoque, per frame
   bool mip_puntual_prueba_ = false;            // Test: trilinear -> bilinear (measurement only)
