@@ -112,9 +112,9 @@ elseif ($argumentos.Groups[1].Value -match '--mnk_mode=true') {
     $teclas = [regex]::Matches($argumentos.Groups[1].Value, '--keybind_\S+') | ForEach-Object { $_.Value }
     Anotar 'INFO' ('remapped: ' + $(if ($teclas) { $teclas -join ' ' } else { 'none (SDK defaults)' }))
 } else { Anotar 'FALLO' 'keyboard play is off in the arguments (TECLADO -> Jugar con teclado)' }
-# Step 2's ETC2 textures: how each BC format is kept, the disk cache, and (after the first textures) their quality.
-$etc2 = $arranque -split "`r?`n" | Where-Object { $_ -match '\[compatibilidad\] (BC\d|ETC2)' } | Select-Object -First 10
-foreach ($l in $etc2) { Anotar 'INFO' (($l -replace '^.*?\[compatibilidad\]', '[compatibilidad]').Trim()) }
+# Steps 2 to 4: how BC textures are kept, half precision, ADPF and the thermal step-down.
+$etc2 = $arranque -split "`r?`n" | Where-Object { $_ -match '\[compatibilidad\] (BC\d|ETC2)|C5a: media precision|\[ritmo\]|\[termico\]' } | Select-Object -First 16
+foreach ($l in $etc2) { Anotar 'INFO' (($l -replace '^.*?(\[compatibilidad\]|\[nativo\]|\[ritmo\]|\[termico\])', '$1').Trim()) }
 
 Preguntar 'The keyboard drives the car (A/D steer, E accelerates, Q brakes, or your remap)'
 Preguntar 'The touch controls hid at the first key press'

@@ -22,6 +22,7 @@
 //  with the F3 counter.
 // ===========================================================================
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -300,6 +301,9 @@ std::atomic<int> g_escalon_publicado{0};
 std::atomic<uint64_t> g_fotogramas_por_escalon[kEscalonMax + 1];
 std::atomic<uint64_t> g_subidas{0};
 std::atomic<uint64_t> g_bajadas{0};
+// The step the guard cannot go below while the device is hot (android_ritmo.cpp's thermal step-down). Its own
+// steps and counters are not touched: when the device cools down, the guard is where it would have been.
+std::atomic<int> g_minimo_termico{0};
 
 }  // namespace
 
@@ -350,7 +354,9 @@ void Latir(double ms) {
   }
 }
 
-int Escalon() { return g_escalon_publicado.load(std::memory_order_relaxed); }
+int Escalon() {
+  return std::max(g_escalon_publicado.load(std::memory_order_relaxed), g_minimo_termico.load(std::memory_order_relaxed));
+}
 
 /* The guard only tightens: if one map was already requested, it never goes back to two. */
 int MapasEfectivos(int del_usuario) {
@@ -380,6 +386,12 @@ void Informe() {
 }
 
 }  // namespace nfsmw::guardia30
+
+// The thermal floor, from android_ritmo.cpp's thread: 0 none, 1 one shadow map, 2 no cast shadows.
+extern "C" void nfsmw_guardia30_minimo_termico(int escalon) {
+  nfsmw::guardia30::g_minimo_termico.store(std::clamp(escalon, 0, nfsmw::guardia30::kEscalonMax),
+                                           std::memory_order_relaxed);
+}
 
 namespace nfsmw::recorte_sombras {
 namespace {

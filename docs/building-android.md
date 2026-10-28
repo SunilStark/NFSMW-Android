@@ -111,6 +111,9 @@ clang++ -std=c++17 tools/tests/android_nucleos_test.cpp -o out/android_nucleos_t
 # BC to ETC2/EAC: every block decodes to the encoder's own error, every mode is used, quality and speed
 clang++ -std=c++20 -O2 tools/tests/texturas_etc_test.cpp -o out/texturas_etc_test.exe; out/texturas_etc_test.exe
 
+# the thermal step-down's levels and ADPF's frame work
+clang++ -std=c++17 tools/tests/android_termico_test.cpp -o out/android_termico_test.exe; out/android_termico_test.exe
+
 # half precision: which results go to 16 bits (shadow map and pow stay at 32)
 clang++ -std=c++20 -O1 tools/tests/spirv_precision_test.cpp -o out/spirv_precision_test.exe; out/spirv_precision_test.exe
 

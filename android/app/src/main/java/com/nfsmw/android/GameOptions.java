@@ -67,6 +67,19 @@ final class GameOptions {
             new Option("half_precision", "Precisión del color", "nfsmw_nativo_media_precision", "false",
                     new String[] {"false", "true"},
                     new String[] {"32 bits · como siempre", "16 bits · más rápido en Mali (prueba)"}),
+            // android_ritmo.cpp: before the system throttles, the 30 FPS guard's shadow steps (one map, then no cast
+            // shadows) until the device cools down.
+            new Option("thermal", "Control térmico", "nfsmw_android_termico", "true",
+                    new String[] {"true", "false"},
+                    new String[] {"Automático · recorta sombras antes de calentarse", "Desactivado"}),
+            // android_ritmo.cpp: each frame's work against its budget, so Android sets the clocks for it (13+).
+            new Option("adpf", "Ayuda al sistema (ADPF)", "nfsmw_android_adpf", "true",
+                    new String[] {"true", "false"},
+                    new String[] {"Activada · Android 13 o más", "Desactivada"}),
+            // android_rendimiento.cpp: the game only on the fast cores, or wherever Android puts it.
+            new Option("big_cores", "Núcleos del juego", "nfsmw_android_nucleos_grandes", "true",
+                    new String[] {"true", "false"},
+                    new String[] {"Solo los rápidos", "Los que decida Android"}),
             new Option(RESOLUTION, "Resolución interna", "nfsmw_resolucion_interna", "1280x720",
                     new String[] {"640x360", "1024x576", "1280x720", "1920x1080"},
                     new String[] {"640x360 · máximo rendimiento", "1024x576 · rendimiento", "1280x720 · equilibrado",

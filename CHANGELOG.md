@@ -5,6 +5,10 @@ Changes in this copy, newest first. Upstream's own history is in
 
 ## Unreleased
 
+- **ADPF and thermal step-down** (Android 13+ and 12+). The game's three hot threads report each frame's work to
+  Android against the frame budget, so it can set the clocks for it. Before the tablet throttles, the shadows step
+  down (one map, then no cast shadows) and come back once it has cooled. Launcher: **Control térmico**, **Ayuda al
+  sistema (ADPF)**, **Núcleos del juego**. Not yet run on the tablet.
 - **Half precision fixed for shadows and highlights.** The 16-bit color math (`nfsmw_nativo_media_precision`, off by
   default) also relaxed the shadow map, which holds depth: shadow acne. Its samples, and pow/exp/log with what feeds
   them, now stay at 32 bits. Launcher: **Precisión del color**. Tested on compiled shaders off-device; not yet on

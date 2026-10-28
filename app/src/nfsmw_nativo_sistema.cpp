@@ -31,6 +31,7 @@
 
 #include "nfsmw_nativo_sistema.h"
 
+#include "nfsmw_android_ritmo.h"  // ADPF (Android)
 #include "nfsmw_esperas_tiron.h"
 #include "nfsmw_nativo_destinos.h"
 #include "nfsmw_nativo_ganchos.h"
@@ -1994,6 +1995,9 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
         TrazaSwap();
         Presentar();
         AnotarJuegoPorDelante();  // Measurement only
+#if REX_PLATFORM_ANDROID
+        nfsmw_android_ritmo_fotograma();  // ADPF: this frame's work (android_ritmo.cpp)
+#endif
         break;
       }
       case xenos::PM4_INDIRECT_BUFFER:

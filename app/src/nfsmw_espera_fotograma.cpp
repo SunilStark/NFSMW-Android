@@ -32,6 +32,7 @@
 //   wakeups per frame at no cost; almost none means the notification is broken and the handoff pays up to
 //   1 ms of delay on every delivery.
 
+#include "nfsmw_android_ritmo.h"  // ADPF (Android)
 #include "nfsmw_esperas_tiron.h"
 #include "nfsmw_ordenes_publicadas.h"
 
@@ -183,6 +184,9 @@ void SubirPrioridadUnaVez(bool& hecho, const char* papel) {
     return;
   }
   hecho = true;
+#if REX_PLATFORM_ANDROID
+  nfsmw_android_ritmo_hilo(papel);  // the ADPF session (android_ritmo.cpp)
+#endif
 #if REX_PLATFORM_SWITCH
   const int32_t prioridad = REXCVAR_GET(nfsmw_relevo_prioridad);
   if (prioridad >= 0x1C && prioridad <= 0x3B) {

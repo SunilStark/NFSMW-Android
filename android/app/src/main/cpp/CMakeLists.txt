@@ -33,7 +33,8 @@ endif()
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../../../../../${NFSMW_EDITION_APP}" "nfsmw-app")
 set_target_properties(nfsmw PROPERTIES OUTPUT_NAME "${NFSMW_EDITION_LIBRARY}")
 target_sources(nfsmw PRIVATE "${CMAKE_CURRENT_LIST_DIR}/android_touch.cpp"
-                             "${CMAKE_CURRENT_LIST_DIR}/android_rendimiento.cpp")
+                             "${CMAKE_CURRENT_LIST_DIR}/android_rendimiento.cpp"
+                             "${CMAKE_CURRENT_LIST_DIR}/android_ritmo.cpp")
 
 if(TARGET SDL3-shared)
     # SDLActivity calls System.loadLibrary("SDL3") in every build variant.

@@ -146,6 +146,12 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
   tfetch2DSombraMin's marker, stay at 32 bits, and so do pow/exp/log with what feeds them; a shader whose shadow
   samples cannot be found is left alone. Launcher: **Precisión del color**. Tested on glslang-compiled shaders
   shaped like the library's (`tools/tests/spirv_precision_test.cpp`; spirv-val passes); not yet on the tablet.
+- `android: ADPF session and thermal step-down` (step 4 below): `android/app/src/main/cpp/android_ritmo.cpp`. The
+  preparer, executor and ring threads in an `APerformanceHint` session (API 33+); each frame, at the ring's Swap, the
+  busiest one's CPU time is reported against 1/`nfsmw_limite_fps`. A thread reads `AThermal_getThermalHeadroom` (10 s
+  ahead) every 2 s and sets a floor under the 30 FPS guard's shadow steps (0.85: one map, 0.95: no cast shadows;
+  back one level per minute under 0.70; policy in `android_termico.h`). Loaded with dlsym (minSdk 26). Launcher:
+  **Control térmico**, **Ayuda al sistema (ADPF)**, **Núcleos del juego**. Policy tested off-device; not on the tablet.
 
 ## Next, in order (each measured on the tablet before and after)
 
@@ -182,9 +188,21 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
      or motion blur, and the HUD. Compare screenshots at the same spot against **32 bits**.
    - Measure both on the same route: FPS, 95th/99th percentile frame times, temperature after 15 minutes. Keep 16
      bits only if it is faster and nothing above shows.
-4. **ADPF and thermals**: an `APerformanceHint` session (API 33+) for the game, ring and render threads with the
-   frame budget, and `AThermal_getThermalHeadroom` to step down (resolution, shadows) before the tablet throttles;
-   this can replace the hard pinning of `android_rendimiento.cpp` if it measures better.
+4. **Measure ADPF and the thermal step-down on the tablet** (done in code, see "Done"):
+   - The log at start: `[ritmo] ADPF: objetivo 16.67 ms...`, then `[ritmo] ADPF: sesion con anillo ..., preparador
+     ..., ejecutor ...` (the three threads; on Android 13 the session is rebuilt as each joins) and `[termico] recorte
+     por calor: ...`. "no disponible" or "el sistema no da una sesion" means this Android/One UI does not offer it:
+     note it in "The tablet" and stop here. `adb shell dumpsys performance_hint` should list the session.
+   - Every 30 s `[ritmo] ADPF, ultimos 30 s: ...`: the busiest thread's CPU time against the budget, how many frames
+     went over it, and what each report costs (keep it under ~50 us; it runs on the ring thread). Every minute
+     `[termico] ultimo minuto: margen max ...`, and a line on each level change.
+   - Three 20-minute sessions on the same route, from a cool tablet (launcher options): all on; **Ayuda al sistema
+     (ADPF) → Desactivada**; and **Núcleos del juego → Los que decida Android** with ADPF on. For each: FPS, the
+     95th/99th percentile frame times, temperature (`dumpsys thermalservice`), battery drain per hour, and the
+     seconds per thermal level. Keep the pinning only if it still wins with ADPF on; if Android's choice with ADPF
+     is as good, it is the better default (it adapts to other SoCs).
+   - The thresholds are cvars (`nfsmw_android_termico_nivel1_pct` 85, `_nivel2_pct` 95, `_volver_pct` 70,
+     `_volver_s` 60): if the tablet throttles before level 1 kicks in, lower `nivel1`.
 5. **16:10**: the tablet is 2112x1320. `nfsmw_proporcion_pantalla` (`app/src/nfsmw_render_targets.cpp`,
    `nfsmw_panoramico.cpp`) only widens past 16:9 (Hor+); add the narrower case (Vert+) and internal sizes such as
    1056x660 (exactly half the screen) and 1280x800, to replace the launcher's stretch or bars.
