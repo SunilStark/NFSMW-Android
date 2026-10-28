@@ -341,6 +341,11 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
   either way), GPU per frame about the same. One run each, so some noise; CPU time and pacing point the same way.
   **The tuned build is the one on the tablet** (`out/apk/dev-a78-pgo.apk`; the generic one is
   `out/apk/dev-generico.apk`). The frame rate is still set by the GPU.
+- For everyday play the owner's `nfsmw_args.txt` turns off three measurement-only features that are on by default:
+  `--nfsmw_nativo_diag_reutilizar=false` (texture fingerprints, counted only), `--nfsmw_nativo_informe_s=120` (the
+  big report every 2 minutes instead of 20 s: measure with longer runs, or set it back in the file) and
+  `--nfsmw_nativo_nvk_medir=0` (timing inside NVK, the Switch's driver). `nfsmw_streaming_diag` stays on: it also
+  rescues the streamer's prediction. Not measured; expected effect small.
 - Audio after minimizing (`android: no crackle after minimizing the app`): the rescue freed packets the paused
   voice still held, and their late ends left the game mixing one packet ahead of the voice, crackly until a
   restart, sometimes. Fixed; four minimize/restore cycles on the tablet: ring back to 1,875 ends = 1,875
