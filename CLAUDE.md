@@ -333,8 +333,14 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
   ms of GPU per frame, against 42-44.6 FPS and 19-20 ms in sesion9, with the busiest CPU thread the same or a
   little lower (7.2-9.1 ms against 8.7-9.5). A CPU-side build does not change the GPU's work, so the tablet's state
   (after an hour of builds and a 15-minute instrumented session) is the likely cause; the GPU clock was not
-  sampled. **Owed: an A/B on the same route from a cool tablet, with `gpu_clock` sampled, this build against
-  apk15** (a plain `-Pnfsmw.applicationIdSuffix=.dev` build).
+  sampled.
+- **A/B done** (same source, same race, both runs from a cool tablet: GPU 33-35 C at the start; 2 minutes each with
+  `gpu_clock` sampled; `out/tablet/ab_*`): the GPU clock was the same (mean 510 vs 513 MHz), so it is a fair
+  comparison. Tuned (exynos1380 + PGO) against generic: FPS 40.8 vs 40.2 (mean of four 30 s windows), busiest CPU
+  thread 8.8 vs 10.1 ms (~13 % less), frames over 25 ms 34 % vs 46 %, over 36 ms 1.3 % vs 0.7 % (few frames
+  either way), GPU per frame about the same. One run each, so some noise; CPU time and pacing point the same way.
+  **The tuned build is the one on the tablet** (`out/apk/dev-a78-pgo.apk`; the generic one is
+  `out/apk/dev-generico.apk`). The frame rate is still set by the GPU.
 - Audio after minimizing (`android: no crackle after minimizing the app`): the rescue freed packets the paused
   voice still held, and their late ends left the game mixing one packet ahead of the voice, crackly until a
   restart, sometimes. Fixed; four minimize/restore cycles on the tablet: ring back to 1,875 ends = 1,875
@@ -402,7 +408,8 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
 6. **45 FPS**: done (see "Done in this copy").
 7. **Game data in the app's own folder** (`getExternalFilesDir`): no shared-storage overhead while the track
    streams, and no All files access. `MainActivity.GAME_FOLDER_NAME` and `GameActivity` hold the path.
-8. **A build for this SoC**: done in code (`-Pnfsmw.cpu=exynos1380`, `-Pnfsmw.pgo=generar|usar`; recipe in
-   `docs/building-android.md`); the A/B against the generic build is still owed (see the step 9 notes above).
+8. **A build for this SoC**: done (`-Pnfsmw.cpu=exynos1380`, `-Pnfsmw.pgo=generar|usar`; recipe in
+   `docs/building-android.md`). A/B on the tablet: ~13 % less CPU time and steadier pacing, same FPS (step 9
+   notes above). Redo the profile session after large changes to the game code.
 9. **Renderer on Mali**: load/store operations (clear or don't-care) and transient depth attachments; confirm with
    Arm Performance Studio (Streamline) counters over adb.

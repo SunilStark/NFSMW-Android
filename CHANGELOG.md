@@ -9,7 +9,8 @@ Changes in this copy, newest first. Upstream's own history is in
   of what was playing, crackly until a restart (not every time). Four minimize/restore cycles on the tablet: in
   step every time, no crackle.
 - **A build for the Galaxy Tab S10 Lite**, optional: tuned for its processor and optimized from a profile of real
-  play (`-Pnfsmw.cpu=exynos1380`, `-Pnfsmw.pgo`). Runs on the tablet; the before/after measurement is still to do.
+  play (`-Pnfsmw.cpu=exynos1380`, `-Pnfsmw.pgo`). Measured on the tablet against the generic build (same race, same GPU clock): about 13 % less CPU
+  time per frame and a quarter fewer frames over 25 ms; the same frame rate (the GPU sets it).
 
 - **The GPU's time goes to Android too** (ADPF, Android 15+): each frame's report carries how long the GPU took,
   so the system can pick the GPU clock for the frame budget. On the tablet the reports are accepted; the clock
