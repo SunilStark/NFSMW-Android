@@ -1,8 +1,9 @@
 name: Android ARM64
 
+# Manual only in this copy: the build needs the C++ generated from your own default.xex (app/generated), which is
+# never in the repository, so a run on GitHub fails at CMake's include(generated/rexglue.cmake). Builds happen on
+# the PC that has the game (CLAUDE.md).
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 jobs:

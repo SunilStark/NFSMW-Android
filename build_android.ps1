@@ -26,7 +26,9 @@ Push-Location (Join-Path $repoRoot 'android')
 try {
     # Gradle and javac print warnings on stderr; with 'Stop' PowerShell would abort on the first one.
     $ErrorActionPreference = 'Continue'
-    & $wrapper assembleRelease
+    # (extra arguments go to Gradle, quoted, as PowerShell splits -P... at its dots:
+    # .\build_android.ps1 '-Pnfsmw.applicationIdSuffix=.dev')
+    & $wrapper assembleRelease @args
     if ($LASTEXITCODE -ne 0) { throw "Gradle build failed with exit code $LASTEXITCODE" }
     $apk = Join-Path $repoRoot 'android\app\build\outputs\apk\release\app-release.apk'
     Write-Host "APK: $apk"

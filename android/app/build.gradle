@@ -19,6 +19,10 @@ if (editionId != 'pal_es') {
     principal.library = editionLibrary
 }
 def editions = [principal]
+// A build that installs beside the published app (-Pnfsmw.applicationIdSuffix=.dev): its own package, data and
+// launcher name, the same game folder. Empty: the published package.
+def idSuffix = providers.gradleProperty('nfsmw.applicationIdSuffix').getOrElse('')
+if (!(idSuffix ==~ /(\.[a-z][a-z0-9_]{0,15})?/)) throw new GradleException('Invalid application ID suffix')
 def editionsDir = providers.gradleProperty('nfsmw.editionsDir').orNull
 if (editionsDir != null) {
     if (editionId != 'pal_es') throw new GradleException('Multi-edition packages require the PAL base')
@@ -72,7 +76,8 @@ android {
     }
 
     defaultConfig {
-        applicationId 'com.nfsmw.android'
+        applicationId 'com.nfsmw.android' + idSuffix
+        manifestPlaceholders = [appLabel: idSuffix ? "NFS Most Wanted (${idSuffix.substring(1)})" : 'Need for Speed Most Wanted']
         minSdk 26
         targetSdk 35
         versionCode 16
