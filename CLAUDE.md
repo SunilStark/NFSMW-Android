@@ -27,8 +27,9 @@ the reflection fixes and 9a (not the same route, so no clean before/after for th
 what is left are under "Next", step 9. The tablet reaches thermal level 1 within a few minutes of play.
 
 Measuring on this PC: record the whole log while the owner plays
-(`adb logcat -v time -s NFSMW-rex:V NFSMW:V > out/tablet/<name>.log`, from Git Bash in the background; a PowerShell
-background job was cut off after a minute), then read the C2/C6 reports from it.
+(`cmd /c "adb logcat -v time -s NFSMW-rex:V NFSMW:V >> out	ablet\<name>.log"` in a Terminal panel tab; Git Bash in
+the background worked once and later exited at once, and a PowerShell background job was cut off after a minute),
+then read the C2/C6 reports from it.
 
 On this PC, the asset-free tests pass: the three Java tests in `docs/building-android.md`, and `android_nucleos`,
 `texturas_etc`, `tamano_pantalla`, `android_termico`, `spirv_precision`, `texturas_cache_etc` (after a Windows fix).
@@ -173,6 +174,8 @@ The same steps, with more detail, are in `docs/building-android.md`; keep both i
 
 `tools/android/comprobar_tableta.ps1` runs the checks of step 1 below; these are the pieces it uses.
 
+- Extra arguments without a launcher option: put `--cvar=value` lines in `nfsmw_args.txt` in the game folder
+  (`adb push` from Git Bash needs `MSYS_NO_PATHCONV=1`, or the `/sdcard/...` path is rewritten); delete it after.
 - Log: `adb logcat -s NFSMW-rex NFSMW` (the game's own log goes to logcat under `NFSMW-rex`; the launcher's
   **Send crash or log** makes a ZIP with the native logs too).
 - Fast cores: at start the log lists each core (`[android] nucleos (cpu:reloj/capacidad/parte): ...`) and should then
@@ -260,8 +263,18 @@ battery use **Unrestricted**, Game Booster on.
     address is learned (0x07647000 at 1280x720 on the tablet, not 0x07C5A000).
   - `android: clears done by the next pass with loadOp = CLEAR (step 9a)`: clears 1.2-3.3 → 0.16 ms per frame, no
     DIFERENCIA, nothing wrong on screen.
-  - Built, not yet run on the tablet: the slow reflection refresh, the reflection guard looking again, and
-    **Screen scaling → Display hardware** (9c, below).
+  - `android: display hardware scales the image; brightness, color filter and shadow options (step 9c)` and
+    `android: smooth shadow edges on the cars only`: confirmed by the owner (fills the screen, brighter, no banding,
+    smooth shadows). Race at 1024x576 / 45 FPS limit: 41-44 FPS, GPU 22-25 ms per frame.
+  - `android: fragments per pixel shader on Mali, and extra arguments from the game folder`: Mali has no
+    pipeline statistics, so `--nfsmw_nativo_estadisticas_por_dibujo_s=N` now counts each draw's fragments with
+    precise occlusion queries (draws inside the game's own occlusion queries are skipped). `nfsmw_args.txt` in the
+    game folder: each `--cvar=value` line is added to the game's arguments (for measuring without a launcher
+    option). `tools/android/extraer_spirv.py` writes the shader library's SPIR-V (`ps_NNN.spv`) for malioc. Race
+    on the tablet (`out/tablet/sesion7.log`): scene 12.7-14.4 ms of GPU, 3.0-3.7 M fragments and ~770 draws per
+    frame; PS n108 37-40 % of them (~200 draws), n29 12-13 % (one draw), n57 11-14 % (~220 draws), n131 7-10 %,
+    n24 5-6 % (one draw), n90 4-6 %, n101 4-5 %. Road reflection 1.2-1.7 ms, 1.2 M fragments (PS n63 ~53 %, n19
+    ~40 %, one draw).
 
 ## Next, in order (each measured on the tablet before and after)
 
@@ -273,6 +286,11 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
   drawing the image again at 2112x1320. Screen scaling → Display hardware puts the surface at 1280x800 and lets the
   display hardware scale; measure the gap with it on and off. Then: the ~4 pass resumes per frame after copies
   (each reloads color and depth), and 9b (store depth only when read).
+- Later: 9c done; 9b measured at ~0.3-0.5 ms and skipped by the owner. The scene pass (12.7-14.4 ms) is the cost
+  left; its fragments per pixel shader are measured (see "Done"). Next: Arm's Mali Offline Compiler (`malioc`,
+  Arm Performance Studio; its installer failed with 1603 on this PC, retry with a `/l*v` log) on
+  `out/tablet/spirv/ps_*.spv` for cycles per fragment, times the fragment counts, then work on the costliest
+  shaders. The road reflection (**Wet road reflection → Off**) would save ~1.2-1.7 ms.
 
 1. **Confirm the two changes above on the tablet**: the core log line, keyboard play and remapping, controller and
    keyboard connected mid-race. Build and install the `.dev` APK, then run

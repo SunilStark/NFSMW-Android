@@ -214,6 +214,9 @@ class ContextoDestinos {
   // UINT32_MAX if not measured or if there is no room left.
   virtual uint32_t EmpezarEstadisticasDibujo(uint32_t etiqueta, uint32_t categoria) = 0;
   virtual void TerminarEstadisticasDibujo(uint32_t indice) = 0;
+  // The per-draw queries are occlusion queries (no pipeline statistics): they cannot be open together with
+  // the game's or the reflection's, which are of the same type.
+  virtual bool EstadisticasDibujoPorOclusion() const { return false; }
 };
 
 struct PeticionDibujo {

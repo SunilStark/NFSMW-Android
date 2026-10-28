@@ -1137,6 +1137,28 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
         }
         fragmentos_por_shader_.assign(size_t(kEtiquetasShader) * kGpuCategorias, 0);
         dibujos_por_shader_.assign(size_t(kEtiquetasShader) * kGpuCategorias, 0);
+      } else if (dispositivo_->properties().occlusionQueryPrecise && leer_consultas_) {
+        /*
+         * Fragments per pixel shader on GPUs without pipeline statistics (Mali-G68: pipelineStatisticsQuery 0).
+         * A precise occlusion query per draw counts the samples that pass the depth test and are written: not
+         * the shaded fragments (those rejected by depth are missing), but on a tiled GPU, which shades after
+         * hidden surface removal, close to what costs. One per draw, only in the diagnostic frame
+         * (nfsmw_nativo_estadisticas_por_dibujo_s).
+         */
+        VkQueryPoolCreateInfo info_dibujo{};
+        info_dibujo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        info_dibujo.queryType = VK_QUERY_TYPE_OCCLUSION;
+        info_dibujo.queryCount = uint32_t(ranuras_.size() * kEstadisticasDibujoPorRanura);
+        if (dfn_.vkCreateQueryPool(device_, &info_dibujo, nullptr, &estadisticas_dibujo_) == VK_SUCCESS) {
+          dibujo_por_oclusion_ = true;
+          fragmentos_por_shader_.assign(size_t(kEtiquetasShader) * kGpuCategorias, 0);
+          dibujos_por_shader_.assign(size_t(kEtiquetasShader) * kGpuCategorias, 0);
+        } else {
+          estadisticas_dibujo_ = VK_NULL_HANDLE;
+        }
+        REXLOG_INFO("[nativo] C2: fragmentos por pixel shader {}",
+                    dibujo_por_oclusion_ ? "con consultas de oclusion precisas (sin estadisticas de tuberia)"
+                                         : "no disponibles");
       }
       REXLOG_INFO("[nativo] C2: estadisticas de tuberia por pasada {}",
                   estadisticas_ != VK_NULL_HANDLE ? "disponibles (nfsmw_nativo_estadisticas_pipeline)"
@@ -4065,11 +4087,14 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
     }
     const uint32_t indice = ranura_ * kEstadisticasDibujoPorRanura +
                             uint32_t(ranura.estadisticas_dibujo.size());
-    dfn_.vkCmdBeginQuery(comandos_trabajo_, estadisticas_dibujo_, indice, 0);
+    dfn_.vkCmdBeginQuery(comandos_trabajo_, estadisticas_dibujo_, indice,
+                         dibujo_por_oclusion_ ? VK_QUERY_CONTROL_PRECISE_BIT : 0);
     ranura.estadisticas_dibujo.emplace_back(
         indice, uint16_t((categoria % kGpuCategorias) * kEtiquetasShader + etiqueta % kEtiquetasShader));
     return indice;
   }
+
+  bool EstadisticasDibujoPorOclusion() const override { return dibujo_por_oclusion_; }
 
   void TerminarEstadisticasDibujo(uint32_t indice) override {
     if (estadisticas_dibujo_ != VK_NULL_HANDLE && indice != UINT32_MAX && grabando_) {
@@ -5236,15 +5261,18 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
       return;
     }
     const uint32_t n = uint32_t(ranura.estadisticas_dibujo.size());
-    std::vector<uint64_t> valores(size_t(n) * kContadoresEstadistica, 0);
+    // Pipeline statistics: three counters, fragments the third. Occlusion (Mali): one, the samples written.
+    const uint32_t contadores = dibujo_por_oclusion_ ? 1u : kContadoresEstadistica;
+    const uint32_t fragmentos = dibujo_por_oclusion_ ? 0u : 2u;
+    std::vector<uint64_t> valores(size_t(n) * contadores, 0);
     if (estadisticas_dibujo_ != VK_NULL_HANDLE && leer_consultas_ &&
         leer_consultas_(device_, estadisticas_dibujo_, ranura.estadisticas_dibujo.front().first, n,
                         sizeof(uint64_t) * valores.size(), valores.data(),
-                        sizeof(uint64_t) * kContadoresEstadistica,
+                        sizeof(uint64_t) * contadores,
                         VK_QUERY_RESULT_64_BIT) == VK_SUCCESS) {
       for (uint32_t i = 0; i < n; ++i) {
         const uint16_t etiqueta = ranura.estadisticas_dibujo[i].second;
-        fragmentos_por_shader_[etiqueta] += valores[i * kContadoresEstadistica + 2];
+        fragmentos_por_shader_[etiqueta] += valores[i * contadores + fragmentos];
         ++dibujos_por_shader_[etiqueta];
       }
       // A diagnostic frame may span several submissions: the first one of each window counts.
@@ -6210,6 +6238,7 @@ class DestinosVulkan final : public DestinosNativos, public ContextoDestinos {
   std::array<uint64_t, kGpuCategorias> primitivas_categoria_{};
   uint64_t estadisticas_sin_sitio_ = 0;
   VkQueryPool estadisticas_dibujo_ = VK_NULL_HANDLE;
+  bool dibujo_por_oclusion_ = false;  // the per-draw pool is OCCLUSION (no pipeline statistics on this GPU)
   std::vector<uint64_t> fragmentos_por_shader_;
   std::vector<uint64_t> dibujos_por_shader_;
   uint64_t fotogramas_diagnostico_ = 0;

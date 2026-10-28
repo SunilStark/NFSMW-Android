@@ -3863,12 +3863,18 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     // In the diagnostic frame, one query per draw with its pixel shader.
     // The diagnostic window is decided by the context, at the Swap. With the diagnostic off (the normal
     // case) this does not even reach the call.
+    // With occlusion queries (Mali, no pipeline statistics) a draw inside the game's own occlusion query cannot
+    // be measured: two of the same type cannot be open.
+    const bool oclusion_ocupada = oclusion_abierta_ || consulta_oclusion_ != UINT32_MAX;
     const uint32_t consulta_dibujo =
-        !diag_estadisticas_dibujo_
+        !diag_estadisticas_dibujo_ || (oclusion_ocupada && contexto_->EstadisticasDibujoPorOclusion())
             ? UINT32_MAX
             : contexto_->EmpezarEstadisticasDibujo(
                   ps ? ps->numero + 1 : 0,
                   CategoriaDeDestino(pitch, claves));
+    // And then the reflection's own query waits for another frame (unmeasured counts as visible, the safe side).
+    const bool dibujo_ocupa_oclusion =
+        consulta_dibujo != UINT32_MAX && contexto_->EstadisticasDibujoPorOclusion();
     /*
      * nfsmw_reflejo_visibilidad. An occlusion query around this draw alone, if it samples the reflection:
      * 0 samples = it wrote nothing to any target. Two of the same type cannot be open at once, so while a
@@ -3878,14 +3884,14 @@ class DibujosVulkanImpl final : public DibujosVulkan {
      */
     uint32_t consulta_visibilidad = UINT32_MAX;
     if (lee_reflejo) {
-      if (!oclusion_abierta_ && consulta_oclusion_ == UINT32_MAX) {
+      if (!oclusion_abierta_ && consulta_oclusion_ == UINT32_MAX && !dibujo_ocupa_oclusion) {
         consulta_visibilidad = contexto_->EmpezarConsultaVisibilidad(false);
       }
       if (consulta_visibilidad == UINT32_MAX) {
         nfsmw::reflejo_demanda::AnotarVisible(false);
       }
     } else if (testigo_pendiente_ && ps && ps->shader && ps->shader->huella == kHuellaComposicion &&
-               !oclusion_abierta_ && consulta_oclusion_ == UINT32_MAX) {
+               !oclusion_abierta_ && consulta_oclusion_ == UINT32_MAX && !dibujo_ocupa_oclusion) {
       consulta_visibilidad = contexto_->EmpezarConsultaVisibilidad(true);
       if (consulta_visibilidad != UINT32_MAX) {
         testigo_pendiente_ = false;
@@ -3986,7 +3992,9 @@ class DibujosVulkanImpl final : public DibujosVulkan {
       bufers.fill(c.bufer);
       dfn_.vkCmdBindVertexBuffers(cmd, 0, c.n_enlaces, bufers.data(), c.offsets_vertices.data());
     }
-    const uint32_t consulta = !diag_estadisticas_dibujo_
+    const bool oclusion_ocupada =
+        contexto_->EstadisticasDibujoPorOclusion() && (oclusion_abierta_ || consulta_oclusion_ != UINT32_MAX);
+    const uint32_t consulta = !diag_estadisticas_dibujo_ || oclusion_ocupada
                                   ? UINT32_MAX
                                   : contexto_->EmpezarEstadisticasDibujo(c.ps_mas_uno, c.categoria);
     if (c.con_indices) {

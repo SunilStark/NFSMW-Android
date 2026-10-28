@@ -282,6 +282,23 @@ public final class GameActivity extends SDLActivity
             args.add("--present_safe_area_x=100");
             args.add("--present_safe_area_y=100");
         }
+        // Diagnostics without a new build: each "--name=value" line of nfsmw_args.txt in the game folder (adb push)
+        // is passed after the launcher's, so it wins. Anything else in the file is ignored.
+        File extra = new File(gameRoot, "nfsmw_args.txt");
+        if (extra.isFile()) {
+            try (java.io.BufferedReader lines = new java.io.BufferedReader(new java.io.InputStreamReader(
+                    new FileInputStream(extra), java.nio.charset.StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = lines.readLine()) != null) {
+                    line = line.trim();
+                    if (line.matches("--[A-Za-z0-9_]+=\\S*")) {
+                        args.add(line);
+                    }
+                }
+            } catch (IOException e) {
+                Log.w(TAG, "nfsmw_args.txt", e);
+            }
+        }
         // In logcat so a check on the device can see what the launcher passed (tools/android/comprobar_tableta.ps1).
         Log.i(TAG, "argumentos del juego: " + String.join(" ", args));
         return args.toArray(new String[0]);

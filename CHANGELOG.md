@@ -5,6 +5,10 @@ Changes in this copy, newest first. Upstream's own history is in
 
 ## Unreleased
 
+- **For measuring:** fragments per pixel shader on Mali (precise occlusion queries per draw), `nfsmw_args.txt` in
+  the game folder for extra `--cvar=value` arguments, and `tools/android/extraer_spirv.py` to pull the shader
+  library's SPIR-V for Arm's offline compiler. Run on the tablet.
+
 - **Faster on Mali (step 9).** Clears are done by the next pass with `loadOp = CLEAR` instead of writing the whole
   image to memory and loading it back (race clears 1.2-3.3 → 0.16 ms of GPU per frame). **Screen scaling → Display
   hardware** (built, not yet measured): the game's surface stays at the internal resolution's width and the display
