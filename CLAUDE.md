@@ -298,6 +298,17 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
   ~2 ms at most. The rest (~11 ms) is vertices, tiling, memory traffic or per-draw cost: measure with Streamline's
   hardware counters next. The tablet has no Perfetto GPU counters (`perfetto --query`: only `android.gpu.memory`),
   and it is not rooted (`ro.debuggable=0`), so Streamline needs a debuggable `.dev` build.
+- Streamline done (`-Pnfsmw.debuggable=true`, only with the `.dev` suffix; a 1-minute rebuild). Capture: all 150
+  Mali-G68 counters for 150 s of a race (`out/tablet/streamline/`; `streamline_me.py --headless` with a
+  `configuration.xml` listing every counter in `streamline/gator/daemon/events-Mali-G68_hw.xml`). Beware: the script
+  force-stops the app when it starts and again when the capture ends. **The GPU clock in the race never went above
+  552 MHz of its 949 MHz** (frequency table 221-949 MHz; inferred from GPU-active cycles per 1 ms bucket: mostly
+  351-455 MHz), with the tablet cool (thermal level 0 for the first 90 s). So the 22 ms of GPU per frame are ~10-11
+  ms of work at full clock. Not known yet: whether the Interactive governor (`/sys/kernel/gpu/gpu_governor`) sees
+  low load or something caps it (Samsung's `com.samsung.android.game.gos` is installed; the governor's limits are
+  not readable without root). Next: sample `/sys/kernel/gpu/gpu_clock` and `gpu_busy` during a race; if the load is
+  high and the clock low, it is a cap; if the load is low, report the GPU time to ADPF
+  (`AWorkDuration_setActualGpuDurationNanos`, API 35) and look for the CPU-GPU waits.
 
 1. **Confirm the two changes above on the tablet**: the core log line, keyboard play and remapping, controller and
    keyboard connected mid-race. Build and install the `.dev` APK, then run

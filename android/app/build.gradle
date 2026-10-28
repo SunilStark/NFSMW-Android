@@ -28,6 +28,10 @@ if (!(idSuffix ==~ /(\.[a-z][a-z0-9_]{0,15})?/)) throw new GradleException('Inva
 def nativeJobs = providers.gradleProperty('nfsmw.nativeJobs').getOrElse('0')
 def ltoJobs = providers.gradleProperty('nfsmw.ltoJobs').getOrElse('0')
 if (!(nativeJobs ==~ /[0-9]{1,2}/) || !(ltoJobs ==~ /[0-9]{1,2}/)) throw new GradleException('Invalid job count')
+// Arm Streamline reads the Mali's hardware counters only from a debuggable app on a phone that is not rooted
+// (-Pnfsmw.debuggable=true). Only with an ID suffix, so the published package is never built debuggable.
+def debuggableBuild = providers.gradleProperty('nfsmw.debuggable').getOrElse('false') == 'true'
+if (debuggableBuild && idSuffix.isEmpty()) throw new GradleException('nfsmw.debuggable needs nfsmw.applicationIdSuffix')
 def editionsDir = providers.gradleProperty('nfsmw.editionsDir').orNull
 if (editionsDir != null) {
     if (editionId != 'pal_es') throw new GradleException('Multi-edition packages require the PAL base')
@@ -106,6 +110,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            debuggable debuggableBuild
             signingConfig signingConfigs.debug
             // AGP builds release natives as RelWithDebInfo (-O2 -g); the game wants the SDK's Release
             // flags (-O3, no asserts) and ThinLTO (src/main/cpp/CMakeLists.txt).
