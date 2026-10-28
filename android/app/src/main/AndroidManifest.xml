@@ -55,6 +55,14 @@
             android:configChanges="layoutDirection|locale|grammaticalGender|fontScale|fontWeightAdjustment|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
+        <!-- Leaving the game ends its process; this one, in a process of its own, reopens the launcher. -->
+        <activity
+            android:name=".RestartActivity"
+            android:exported="false"
+            android:process=":restart"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- The LAN's EA lobby server when this phone hosts, in its own process so it outlives the game. -->
         <service
             android:name=".LanServerService"

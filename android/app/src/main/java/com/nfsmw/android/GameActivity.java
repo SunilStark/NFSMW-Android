@@ -276,8 +276,43 @@ public final class GameActivity extends SDLActivity
         refreshGamepads();
     }
 
+    // ---- Leaving the game -----------------------------------------------------------------------------------
+
+    /** Back twice within this time asks to leave; a single Back does nothing, so a stray gesture is harmless. */
+    private static final long EXIT_WINDOW_MS = 2000;
+    private long lastBack;
+    private AlertDialog exitDialog;
+
+    @Override
+    public void onBackPressed() {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - lastBack > EXIT_WINDOW_MS) {
+            lastBack = now;
+            android.widget.Toast.makeText(this, "Press back again to leave the game",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        lastBack = 0;
+        if (exitDialog != null && exitDialog.isShowing()) {
+            return;
+        }
+        exitDialog = new AlertDialog.Builder(this)
+                .setTitle("Leave the game?")
+                .setMessage("Progress since the game last saved will be lost. You return to the launcher.")
+                .setNegativeButton("Keep playing", null)
+                .setPositiveButton("Leave", (dialog, which) -> RestartActivity.restartLauncher(this))
+                .show();
+    }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // Back (the gesture, or the navigation bar) is the activity's own: the game never sees it as a key.
+        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && !isGamepad(event.getDevice())) {
+            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+                onBackPressed();
+            }
+            return true;
+        }
         // A keyboard that plays (KeyboardBindings) hides the touch controls as a controller does; a touch
         // brings them back.
         if (controls != null && (isGamepad(event.getDevice()) ||
