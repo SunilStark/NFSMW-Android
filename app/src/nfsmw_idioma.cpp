@@ -17,6 +17,14 @@
 //
 // With nfsmw_idioma >= 0 the first SetCurrentLanguage (the startup one) gets that id instead, if its file is
 // on the disc; otherwise the edition's language stays and a warning is logged.
+//
+// Movies do not follow by themselves: their file name carries a language. sub_82282E98(r3 = buffer,
+// r5 = movie name, r6 = language id) writes "%sMOVIES\%s%s%s%s" with "_" + that language's name (+4 in the
+// table), "_pal" and ".wmv"; its caller, sub_82282F30, asks for the current language first and English (0)
+// if that file is missing. A disc only has its own language's movies (MOVIES\*_spanish_pal.wmv on the
+// Spanish one), so with English text both tries missed and no movie played. While the startup language was
+// replaced, a movie asked for in that language is asked for in the edition's: the disc's movies play, and
+// the English fallback stays as it was.
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -47,6 +55,9 @@ uint32_t Leer32(const uint8_t* base, uint32_t dir) {
 }
 
 std::atomic<bool> g_aplicado{false};
+// The edition's language while the startup one was replaced; -1 otherwise.
+std::atomic<int32_t> g_idioma_edicion{-1};
+std::atomic<bool> g_video_avisado{false};
 
 }  // namespace
 }  // namespace nfsmw::idioma
@@ -102,6 +113,22 @@ REX_HOOK_RAW(sub_822BCBD0) {
   }
   REXLOG_INFO("[idioma] textos en '{}' (id {}) en lugar del idioma de la edicion ({})",
               reinterpret_cast<const char*>(base + fichero), pedido, de_la_edicion);
+  g_idioma_edicion.store(int32_t(de_la_edicion), std::memory_order_relaxed);
   ctx.r3.u64 = uint32_t(pedido);
   __imp__sub_822BCBD0(ctx, base);
+}
+
+// The movie path: "%sMOVIES\%s_<language>_pal.wmv" (r5 = movie name, r6 = language id).
+REX_EXTERN(__imp__sub_82282E98);
+REX_HOOK_RAW(sub_82282E98) {
+  using namespace nfsmw::idioma;
+  const int32_t edicion = g_idioma_edicion.load(std::memory_order_relaxed);
+  if (edicion >= 0 && ctx.r6.u32 == uint32_t(REXCVAR_GET(nfsmw_idioma))) {
+    if (!g_video_avisado.exchange(true)) {
+      REXLOG_INFO("[idioma] videos en el idioma de la edicion ({}), no en el de los textos ({})", edicion,
+                  ctx.r6.u32);
+    }
+    ctx.r6.u64 = uint32_t(edicion);
+  }
+  __imp__sub_82282E98(ctx, base);
 }
