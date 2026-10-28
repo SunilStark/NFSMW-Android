@@ -49,5 +49,5 @@ code generator another way, run them afterwards, in this order.
 | Folder | What it has |
 |---|---|
 | `editions/` | Support for the other editions: address matching, edition tree creation and checks ([docs/editions.md](../docs/editions.md)); `android/editions.py` drives them for Android builds ([docs/ANDROID_EDITIONS.md](../docs/ANDROID_EDITIONS.md)). |
-| `tests/` | Checks of the launcher's Java (saves, presets, keys, editions, drivers), the fast-core choice, and the GPU, texture, shader and audio code; [docs/building-android.md](../docs/building-android.md) lists the ones that need no device. |
+| `tests/` | Checks of the launcher's Java (saves, presets, keys, editions, drivers), the fast-core choice, and the GPU, texture (BC, ETC2 and its cache), shader and audio code; [docs/building-android.md](../docs/building-android.md) lists the ones that need no device. `rex_minimo/` stands in for the SDK's logging and threads in tests built without the SDK. |
 | `icono/` | `icono_adaptativo.py`: the launcher's adaptive icon from the artwork. |

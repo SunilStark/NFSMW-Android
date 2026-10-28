@@ -132,6 +132,14 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
 - Cleanup: this copy's own `README.md`, `CHANGELOG.md` and `docs/building-android.md`; upstream's Switch build files
   and release/planning docs removed. The Switch background docs (`docs/platform-notes.md`, `mesa.md`, `editions.md`,
   `performance-history.md`, `audio-and-video.md`) stay because comments in `sdk/` and `app/` point at them.
+- `tools/android/comprobar_tableta.ps1`, the checks of step 1 (not run yet).
+- `android: keep BC textures compressed as ETC2 on GPUs without BC` (step 2 below, Vulkan only): BC1 to ETC2
+  RGB8A1, BC2/3 to ETC2 RGBA8, BC4/5 to EAC R11/RG11 (`app/src/nfsmw_texturas_etc.h`), transcoded in the background
+  on the little cores into a disk cache (`app/src/nfsmw_texturas_cache_etc.cpp`, under the game's cache folder,
+  `texturas_etc2_v1/`); a texture is decoded as before the first time, ETC2 from then on. cvars
+  `nfsmw_nativo_bc_a_etc2` (launcher: **Texturas en GPUs sin BC**), `nfsmw_nativo_etc2_cache_mb`,
+  `nfsmw_nativo_etc2_hilos`; the SDK now enables `textureCompressionETC2`. Checked off-device (encoder, cache, and
+  Mesa's ETC2 decoder against ours on every texel); not yet on the tablet.
 
 ## Next, in order (each measured on the tablet before and after)
 
@@ -141,9 +149,20 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
    records the device's data (correct "The tablet" above from it), checks the core and argument lines in the log and
    that the game screen is not recreated on hot-plug, and asks the owner what only a person can see. Its summary,
    `out/tablet/paso1.txt`, goes into the commit or into "Done in this copy".
-2. **Textures for Mali**: with no BC support, BC1-5 are decoded on the CPU to 16 or 32 bits a texel
-   (`app/src/nfsmw_nativo_dibujos.cpp`, the `bc_cpu_` path around `formato_host`). Transcode BC1 to ETC2 RGB8 and
-   BC3 to ASTC 4x4 or ETC2 EAC RGBA8 (whichever the tablet's `vkjson` lists) instead, and cache the result on disk.
+2. **Confirm the ETC2 textures on the tablet** (done in code, see above):
+   - The GPU decodes our blocks as our decoder does: build and run `tools/tests/texturas_etc_vulkan_test.cpp` over
+     adb (its first lines). It must print PASS for the four formats; if not, set **Texturas en GPUs sin BC →
+     Descomprimidas** and report which format differs.
+   - The log at start: `[compatibilidad] BC1: ETC2 RGB8A1 si esta en la cache del disco...` for each BC format (or
+     why not), and `ETC2: cache de texturas en ... N texturas`. During play, every 512 BC textures, `[compatibilidad]
+     ETC2: ... desde la cache, ... convertidas al momento ..., ... decodificadas` (on a first session almost all
+     decoded; on the second, mostly from the cache) and, after the first textures, their PSNR.
+   - Look in a full race (second session, cache warm) for wrong colors, black or transparent patches, or blocky
+     gradients on the road, buildings, signs and the car. Then measure against **Descomprimidas** on the same route:
+     FPS, the 95th/99th percentile frame times, temperature, and the texture cache line (`[nativo] C3 diag cache:
+     ... MB`). Watch that `convertidas al momento` stays near 0 (it is ring time) and how fast the cache fills.
+   - The OpenGL ES backend still decodes BC (its own path in `app/src/nfsmw_nativo_dibujos_gles.cpp`); if the tablet
+     ends up on GLES, port the same lookup there.
 3. **Half precision**: try `nfsmw_nativo_media_precision = true` (off by default; RelaxedPrecision in the pixel
    shaders), and look for banding or glitches in a full race.
 4. **ADPF and thermals**: an `APerformanceHint` session (API 33+) for the game, ring and render threads with the

@@ -35,6 +35,8 @@
 #include "nfsmw_nativo_vertices_dedupe.h"
 #include "nfsmw_nativo_texturas_pool.h"
 #include "nfsmw_texturas_bc.h"
+#include "nfsmw_texturas_cache_etc.h"  // nfsmw_nativo_bc_a_etc2
+#include "nfsmw_texturas_etc.h"
 #include "nfsmw_nativo_texturas_comun.h"  // untiling, mips and vertex helpers (shared with GLES)
 #include "nfsmw_nativo_sincronizacion.h"
 #include "nfsmw_spirv_vulkan11.h"
@@ -391,6 +393,26 @@ REXCVAR_DEFINE_BOOL(nfsmw_nativo_bc1_16_bits, true, "NFSMW",
                     "(5:6:5, o 5:5:5:1 si usan su alfa de un bit) en vez de RGBA8: la mitad de memoria y de ancho de "
                     "banda, sin diferencia visible. false = RGBA8 como antes")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// Without BC on the GPU, BC1-5 stay compressed where the GPU samples ETC2 (Mali, PowerVR): BC1 as ETC2 RGB8A1,
+// BC2/3 as ETC2 RGBA8, BC4/5 as EAC R11/RG11 (nfsmw_texturas_etc.h), the size of BC instead of 4 to 8 times it.
+// Transcoding is too slow for the ring, so a texture seen for the first time is decoded as before and handed
+// to threads on the cores the game does not use, which save it to a disk cache (nfsmw_texturas_cache_etc.h);
+// from then on (the same zone later, the next session) it is created as ETC2 and uploaded from the cache.
+REXCVAR_DEFINE_BOOL(nfsmw_nativo_bc_a_etc2, true, "NFSMW",
+                    "Sin BC en la GPU (Mali, PowerVR): las texturas BC se quedan comprimidas en ETC2/EAC, del "
+                    "tamano de BC en vez de 4 a 8 veces mas. La primera vez se ven decodificadas como antes y se "
+                    "convierten en segundo plano a una cache del disco; despues se suben desde ella. false = "
+                    "siempre decodificadas en la CPU")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_INT32(nfsmw_nativo_etc2_cache_mb, 1024, "NFSMW",
+                     "nfsmw_nativo_bc_a_etc2: MB de la cache del disco de texturas ETC2 (por encima se borran las "
+                     "mas antiguas; 64 como minimo)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_INT32(nfsmw_nativo_etc2_hilos, 2, "NFSMW",
+                     "nfsmw_nativo_bc_a_etc2: hilos que convierten texturas a ETC2, en los nucleos donde no esta el "
+                     "juego (1 a 4)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DECLARE(std::string, cache_root);  // sdk/src/system/runtime.cpp: the launcher's cache folder
 
 REXCVAR_DEFINE_BOOL(nfsmw_nativo_mipmaps, true, "NFSMW",
                     "Renderizador nativo: sube los niveles de mip que trae el juego (como en la Xbox 360). false: solo "
@@ -1544,6 +1566,28 @@ uint32_t IndiceBc(VkFormat formato) {
   }
 }
 
+// nfsmw_nativo_bc_a_etc2: the format each BC one (by IndiceBc) is transcoded to (nfsmw_texturas_etc.h).
+VkFormat FormatoEtc2(uint32_t indice_bc) {
+  switch (indice_bc) {
+    case 1: return VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK;
+    case 2:
+    case 3: return VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK;
+    case 4: return VK_FORMAT_EAC_R11_UNORM_BLOCK;
+    case 5: return VK_FORMAT_EAC_R11G11_UNORM_BLOCK;
+    default: return VK_FORMAT_UNDEFINED;
+  }
+}
+
+const char* NombreEtc2(uint32_t indice_bc) {
+  constexpr const char* kNombres[] = {"", "ETC2 RGB8A1", "ETC2 RGBA8", "ETC2 RGBA8", "EAC R11", "EAC RG11"};
+  return indice_bc <= 5 ? kNombres[indice_bc] : "";
+}
+
+// The disk cache key of a BC texture's content: its shape (Textura::forma_etc2) seeded with its raw hash.
+uint64_t ClaveEtc2(uint64_t forma, uint64_t huella_cruda) {
+  return XXH3_64bits_withSeed(&forma, sizeof(forma), huella_cruda);
+}
+
 struct FormatoTextura {
   VkFormat formato = VK_FORMAT_UNDEFINED;
   uint8_t bloque = 1;       // texels per block side
@@ -1894,6 +1938,10 @@ struct Textura {
   uint64_t clave_contenido = 0;
   uint32_t direccion = 0;
   bool contenido_por_medir = false;
+  // nfsmw_nativo_bc_a_etc2: the image is ETC2/EAC (its BC data transcoded, or read from the disk cache), and
+  // the shape part of its cache key (0 = not eligible: no ETC2, 3D, or outside memory when created).
+  bool etc2 = false;
+  uint64_t forma_etc2 = 0;
 };
 
 struct Vista {
@@ -2041,6 +2089,40 @@ class DibujosVulkanImpl final : public DibujosVulkan {
       bc1_16_ = (fp.optimalTilingFeatures & requerido) == requerido;
       REXLOG_INFO("[compatibilidad] BC1: {}", bc1_16_ ? "a 16 bits (A1R5G5B5), la mitad que RGBA8"
                                                       : "RGBA8 (el driver no deja muestrear A1R5G5B5)");
+    }
+    // nfsmw_nativo_bc_a_etc2: which of the converted BC formats can be ETC2 here, and the disk cache.
+    if (REXCVAR_GET(nfsmw_nativo_bc_a_etc2) && propiedades.textureCompressionETC2 &&
+        std::find(bc_cpu_.begin(), bc_cpu_.end(), true) != bc_cpu_.end()) {
+      bool alguno = false;
+      for (uint32_t i = 0; i < 5; ++i) {
+        if (bc_cpu_[i]) {
+          VkFormatProperties fp{};
+          ifn.vkGetPhysicalDeviceFormatProperties(dispositivo_->physical_device(), FormatoEtc2(i + 1), &fp);
+          etc2_[i] = (fp.optimalTilingFeatures & requerido) == requerido;
+          alguno = alguno || etc2_[i];
+        }
+      }
+      const std::string raiz = REXCVAR_GET(cache_root);
+      const std::filesystem::path carpeta =
+          raiz.empty() ? rex::filesystem::GetExecutableFolder() / kCarpetaCache : std::filesystem::path(raiz);
+      if (alguno && !cache_etc_.Iniciar(carpeta, uint64_t(std::max(REXCVAR_GET(nfsmw_nativo_etc2_cache_mb), 64)) << 20,
+                                        uint32_t(std::clamp(REXCVAR_GET(nfsmw_nativo_etc2_hilos), 1, 4)),
+                                        uint64_t(96) << 20)) {
+        etc2_.fill(false);
+      }
+      for (uint32_t i = 0; i < 5; ++i) {
+        if (bc_cpu_[i]) {
+          REXLOG_INFO("[compatibilidad] BC{}: {}", i + 1,
+                      etc2_[i] ? fmt::format("{} si esta en la cache del disco; si no, conversion CPU y a la cache "
+                                             "en segundo plano",
+                                             NombreEtc2(i + 1))
+                               : std::string("sin ETC2 (el driver no lo muestrea, o no hay cache)"));
+        }
+      }
+    } else if (std::find(bc_cpu_.begin(), bc_cpu_.end(), true) != bc_cpu_.end()) {
+      REXLOG_INFO("[compatibilidad] ETC2: {}", REXCVAR_GET(nfsmw_nativo_bc_a_etc2)
+                                                   ? "el dispositivo no tiene textureCompressionETC2"
+                                                   : "apagado (nfsmw_nativo_bc_a_etc2)");
     }
     // nfsmw_nativo_abanicos_a_listas. MoltenVK has no triangleFans in its portability subset.
     abanicos_a_listas_ =
@@ -8578,7 +8660,7 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     const bool bc_cpu = indice_bc && bc_cpu_[indice_bc - 1];
     const auto formato_bc = static_cast<nfsmw::bc::Formato>(indice_bc);
     // Keep tf in the guest format for untiling, mip addresses and byte order.
-    const VkFormat formato_host = !bc_cpu ? tf.formato : indice_bc == 4 ? VK_FORMAT_R8_UNORM
+    VkFormat formato_host = !bc_cpu ? tf.formato : indice_bc == 4 ? VK_FORMAT_R8_UNORM
         : indice_bc == 5 ? VK_FORMAT_R8G8_UNORM : indice_bc == 1 && bc1_16_ ? VK_FORMAT_A1R5G5B5_UNORM_PACK16
         : VK_FORMAT_R8G8B8A8_UNORM;
     // size_2d: 13 + 13 bits; size_3d: 11 + 11 + 10 bits (xenos.h:1222-1233).
@@ -8737,6 +8819,32 @@ class DibujosVulkanImpl final : public DibujosVulkan {
       }
     }
 
+    // The guest bytes of a 2D texture or cubemap (the raw hash below, and the ETC2 lookup of a new texture).
+    const uint32_t log2_bloque = tf.bytes >= 16 ? 4 : tf.bytes >= 8 ? 3 : tf.bytes >= 4 ? 2
+                                                              : tf.bytes >= 2 ? 1 : 0;
+    // Extent of a layer: tiled, GetTiledAddressUpperBound2D (pipeline/texture/util.cpp:461-486); linear,
+    // up to the last block. Includes the packed base offset (base_ox, base_oy; 0 for the rest).
+    const uint32_t bloques_x_leidos = bloques_x + base_ox;
+    const uint32_t bloques_y_leidos = bloques_y + base_oy;
+    const uint64_t extension_capa =
+        ((f[0] >> 31) & 0x1)
+            ? uint64_t(std::max<int64_t>(
+                  DesplazamientoMosaico2D(int32_t((bloques_x_leidos - 1) & ~31u),
+                                          int32_t((bloques_y_leidos - 1) & ~31u), pitch_bloques,
+                                          log2_bloque),
+                  0)) +
+                  (log2_bloque == 0   ? 0xA00u
+                   : log2_bloque == 1 ? 0xC00u
+                                      : (0x400u << log2_bloque))
+            : uint64_t(std::max(pitch_bloques, bloques_x_leidos)) * tf.bytes * (bloques_y_leidos - 1) +
+                  uint64_t(bloques_x_leidos) * tf.bytes;
+    const uint64_t inicio_crudo = uint64_t(base) & 0x1FFFFFFF;
+    const uint64_t extension = (capas - 1) * zancada_cara + extension_capa;
+    // nfsmw_nativo_bc_a_etc2: a new BC texture's raw hash is taken before its image exists, to look its ETC2
+    // copy up in the disk cache. The check below reuses it.
+    uint64_t huella_previa = 0;
+    bool con_huella_previa = false;
+
     Textura& textura = texturas_[clave];
     if (textura.imagen.imagen == VK_NULL_HANDLE) {
       // BC in Vulkan: the size is in whole blocks.
@@ -8744,6 +8852,29 @@ class DibujosVulkanImpl final : public DibujosVulkan {
       const uint32_t alto_host = tf.bloque > 1 ? (alto + 3) & ~uint32_t(3) : alto;
       // With its mip levels (those that fit in the host size).
       const uint32_t niveles = std::min(nivel_max + 1, Log2Suelo(std::max(ancho_host, alto_host)) + 1);
+      // ETC2 if its content is in the disk cache. The shape covers what decides the host data apart from the
+      // guest bytes: the key's words without the addresses (format, byte order, tiling, pitch, size, mip limits,
+      // packed tail), whether the base is read, the host size, levels and layers, and the encoder's version.
+      textura.etc2 = false;
+      textura.forma_etc2 = 0;
+      if (bc_cpu && etc2_[indice_bc - 1] && !volumen && inicio_crudo + extension <= kMemoriaFisica) {
+        const uint64_t forma[4] = {
+            (uint64_t(claves[0]) << 32) | (f[1] & 0x7FF), (uint64_t(claves[2]) << 32) | claves[3],
+            (uint64_t((f[5] >> 9) & 0x7) << 40) | (uint64_t(leer_base) << 36) | (uint64_t(indice_bc) << 32) |
+                nfsmw::etc::kVersion,
+            (uint64_t(ancho_host) << 40) | (uint64_t(alto_host) << 16) | (uint64_t(niveles) << 8) | capas};
+        textura.forma_etc2 = XXH3_64bits(forma, sizeof(forma)) | 1;
+        huella_previa = XXH3_64bits(memoria_->TranslatePhysical(uint32_t(inicio_crudo)), size_t(extension));
+        if (extension_mips) {
+          huella_previa = XXH3_64bits_withSeed(memoria_->TranslatePhysical(uint32_t(dir_mips)),
+                                               size_t(extension_mips), huella_previa);
+        }
+        con_huella_previa = true;
+        if (cache_etc_.Contiene(ClaveEtc2(textura.forma_etc2, huella_previa))) {
+          formato_host = FormatoEtc2(indice_bc);
+          textura.etc2 = true;
+        }
+      }
       /*
        * The vkBindImageMemory goes to the bind thread if possible (nfsmw_nativo_texturas_enlace_hilo) and,
        * otherwise, CrearTextura as usual. What the ring spends creating is timed, without its wait for the
@@ -8786,8 +8917,9 @@ class DibujosVulkanImpl final : public DibujosVulkan {
         textura.contenido_por_medir = true;
       }
       for (uint32_t n = 0; n < niveles; ++n) {
-        const uint32_t bloque_host = bc_cpu ? 1 : tf.bloque;
-        const uint32_t bytes_host = bc_cpu ? nfsmw::bc::Canales(formato_bc) : tf.bytes;
+        const bool decodificada = bc_cpu && !textura.etc2;
+        const uint32_t bloque_host = decodificada ? 1 : tf.bloque;
+        const uint32_t bytes_host = decodificada ? nfsmw::bc::Canales(formato_bc) : tf.bytes;
         textura.bytes += uint64_t((std::max(ancho_host >> n, 1u) + bloque_host - 1) / bloque_host) *
                          ((std::max(alto_host >> n, 1u) + bloque_host - 1) / bloque_host) * bytes_host * capas *
                          (fondo ? fondo : 1);
@@ -8862,6 +8994,9 @@ class DibujosVulkanImpl final : public DibujosVulkan {
                     nivel_empaquetado == UINT32_MAX ? std::string("ninguno") : std::to_string(nivel_empaquetado));
       }
     }
+    if (textura.etc2) {
+      formato_host = FormatoEtc2(indice_bc);  // an existing texture's image, too
+    }
     ranura = RanuraVista(textura.imagen.imagen, formato_host, swizzle, tf.swizzle_host, monton);
     ancho_host_out = textura.imagen.ancho;  // the host's, which is what the shader sees
     alto_host_out = textura.imagen.alto;
@@ -8896,26 +9031,6 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     // 2D and cubemaps: before untiling, XXH3 of the guest bytes. If they have not changed there is nothing
     // to do (untiling and comparing every texture every frame took 62 of the 66 us of each menu draw).
     if (!volumen) {
-      const uint32_t log2_bloque = tf.bytes >= 16 ? 4 : tf.bytes >= 8 ? 3 : tf.bytes >= 4 ? 2
-                                                                : tf.bytes >= 2 ? 1 : 0;
-      // Extent of a layer: tiled, GetTiledAddressUpperBound2D (pipeline/texture/util.cpp:461-486); linear,
-      // up to the last block. Includes the packed base offset (base_ox, base_oy; 0 for the rest).
-      const uint32_t bloques_x_leidos = bloques_x + base_ox;
-      const uint32_t bloques_y_leidos = bloques_y + base_oy;
-      const uint64_t extension_capa =
-          ((f[0] >> 31) & 0x1)
-              ? uint64_t(std::max<int64_t>(
-                    DesplazamientoMosaico2D(int32_t((bloques_x_leidos - 1) & ~31u),
-                                            int32_t((bloques_y_leidos - 1) & ~31u), pitch_bloques,
-                                            log2_bloque),
-                    0)) +
-                    (log2_bloque == 0   ? 0xA00u
-                     : log2_bloque == 1 ? 0xC00u
-                                        : (0x400u << log2_bloque))
-              : uint64_t(std::max(pitch_bloques, bloques_x_leidos)) * tf.bytes * (bloques_y_leidos - 1) +
-                    uint64_t(bloques_x_leidos) * tf.bytes;
-      const uint64_t inicio_crudo = uint64_t(base) & 0x1FFFFFFF;
-      const uint64_t extension = (capas - 1) * zancada_cara + extension_capa;
       if (inicio_crudo + extension <= kMemoriaFisica) {
         /*
          * Per-frame check budget.
@@ -9071,8 +9186,8 @@ class DibujosVulkanImpl final : public DibujosVulkan {
             return;  // applying phase: the thread prepares it; the tail of this function is already done
           }
         }
-        uint64_t huella_cruda = XXH3_64bits(crudo_base, size_t(extension));
-        if (extension_mips) {  // and the bytes of all the mips
+        uint64_t huella_cruda = con_huella_previa ? huella_previa : XXH3_64bits(crudo_base, size_t(extension));
+        if (extension_mips && !con_huella_previa) {  // and the bytes of all the mips
           huella_cruda = XXH3_64bits_withSeed(crudo_mips, size_t(extension_mips), huella_cruda);
         }
         nfsmw::esperas::g_ns_huella_cruda.fetch_add(
@@ -9233,7 +9348,30 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     }
     textura.intervalo = 1;
     textura.siguiente = fotograma_ + 1;
-    if (bc_cpu) {
+    if (bc_cpu && textura.etc2) {
+      // ETC2 image: the blocks from the disk cache. If this content is not there (its memory changed since the
+      // image was created, which the game's own BC textures hardly do), it is transcoded here and saved.
+      const uint64_t clave_etc2 = ClaveEtc2(textura.forma_etc2, textura.huella_cruda);
+      if (cache_etc_.Leer(clave_etc2, datos.size(), datos_etc2_)) {
+        datos.swap(datos_etc2_);
+        ++etc2_desde_cache_;
+      } else {
+        const auto inicio = std::chrono::steady_clock::now();
+        nfsmw::etc::Transcodificar(formato_bc, datos, datos);
+        ns_etc2_al_momento_ += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                            std::chrono::steady_clock::now() - inicio)
+                                            .count());
+        cache_etc_.Guardar(clave_etc2, datos);
+        ++etc2_al_momento_;
+      }
+      InformeEtc2();
+    } else if (bc_cpu) {
+      // A copy of the BC blocks for the conversion threads: the next time this texture is created it can be ETC2.
+      if (textura.forma_etc2) {
+        etc2_encargadas_ += cache_etc_.Encargar(ClaveEtc2(textura.forma_etc2, textura.huella_cruda), formato_bc, datos);
+        ++etc2_decodificadas_;
+        InformeEtc2();
+      }
       if (!nfsmw::bc::Convertir(formato_bc, datos, textura.imagen.ancho, textura.imagen.alto,
                                 capas, textura.niveles, temporal_bc_, textura.desplazamiento_nivel)) {
         REXLOG_ERROR("[compatibilidad] datos BC{} invalidos: {}x{}, {} capas, {} niveles, {} bytes",
@@ -9256,6 +9394,23 @@ class DibujosVulkanImpl final : public DibujosVulkan {
     nfsmw::esperas::g_texturas_subidas.fetch_add(1, std::memory_order_relaxed);
     nfsmw::esperas::g_bytes_subidos.fetch_add(textura.datos.size(), std::memory_order_relaxed);
     bytes_subida += (textura.datos.size() + 3) & ~size_t(3);
+  }
+
+  // nfsmw_nativo_bc_a_etc2: how the BC textures of the CPU path were uploaded, at the first and then every 512.
+  void InformeEtc2() {
+    const uint64_t total = etc2_desde_cache_ + etc2_al_momento_ + etc2_decodificadas_;
+    if (total != 1 && total % 512 != 0) {
+      return;
+    }
+    const nfsmw::etc::CacheEtc::Estadisticas e = cache_etc_.Estado();
+    NFSMW_INFORME_ANILLO("[compatibilidad] ETC2: {} texturas BC subidas: {} desde la cache, {} convertidas al "
+                         "momento en el anillo ({} ms en total), {} decodificadas ({} encargadas a los hilos). "
+                         "Cache: {} texturas, {} MB; convertidas en segundo plano {} ({:.1f} us por bloque), {} "
+                         "descartadas con la cola llena",
+                         total, etc2_desde_cache_, etc2_al_momento_, ns_etc2_al_momento_ / 1000000,
+                         etc2_decodificadas_, etc2_encargadas_,
+                         e.texturas, e.bytes >> 20, e.codificadas,
+                         e.bloques ? double(e.ns_codificar) / 1000.0 / double(e.bloques) : 0.0, e.descartadas);
   }
 
   // --- Measurement only: new textures with the content of another (nfsmw_nativo_diag_reutilizar) ---------------
@@ -12236,6 +12391,16 @@ class DibujosVulkanImpl final : public DibujosVulkan {
 
   const VulkanDevice* dispositivo_;
   std::array<bool, 5> bc_cpu_{};
+  // nfsmw_nativo_bc_a_etc2, by BC index - 1: ETC2 is sampled and the disk cache is open.
+  std::array<bool, 5> etc2_{};
+  nfsmw::etc::CacheEtc cache_etc_;
+  std::vector<uint8_t> datos_etc2_;  // what the cache read
+  // How BC textures on the CPU path were uploaded (InformeEtc2).
+  uint64_t etc2_desde_cache_ = 0;
+  uint64_t etc2_al_momento_ = 0;
+  uint64_t ns_etc2_al_momento_ = 0;  // ring time those took
+  uint64_t etc2_decodificadas_ = 0;
+  uint64_t etc2_encargadas_ = 0;
   bool bc1_16_ = false;  // nfsmw_nativo_bc1_16_bits
   bool abanicos_a_listas_ = false;  // nfsmw_nativo_abanicos_a_listas
   const VulkanDevice::Functions& dfn_;

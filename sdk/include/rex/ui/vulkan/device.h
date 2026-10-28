@@ -120,6 +120,8 @@ class VulkanDevice {
     // Features enabled for native shaders, if requested at initialization.
     bool shaderInt64 = false;
     bool shaderSampledImageArrayDynamicIndexing = false;
+    // Native renderer on GPUs without BC (Mali, PowerVR): BC textures transcoded to ETC2/EAC.
+    bool textureCompressionETC2 = false;
     bool bufferDeviceAddress = false;
     bool runtimeDescriptorArray = false;
     bool descriptorBindingPartiallyBound = false;

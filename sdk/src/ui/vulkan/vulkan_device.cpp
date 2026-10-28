@@ -714,6 +714,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     // through 64-bit pointers; it is still enabled when present.
     XE_UI_VULKAN_FEATURE(shaderInt64)
     XE_UI_VULKAN_FEATURE(shaderSampledImageArrayDynamicIndexing)
+    // Sampling ETC2/EAC images (BC transcoded on GPUs without BC: nfsmw_nativo_bc_a_etc2).
+    XE_UI_VULKAN_FEATURE(textureCompressionETC2)
     // Fragments and vertices shaded per pass (pipeline statistics for the native
     // renderer). Without the feature the query pool cannot be created.
     XE_UI_VULKAN_FEATURE(pipelineStatisticsQuery)

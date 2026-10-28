@@ -57,6 +57,11 @@ final class GameOptions {
                     new String[] {"auto", "off", "on"},
                     new String[] {"Automática · protección Mali", "Máxima compatibilidad · sin destello solar",
                             "Efectos completos · experimental"}),
+            // GPUs without BC (Mali, PowerVR), Vulkan: the BC textures kept compressed as ETC2/EAC, from a disk
+            // cache the game fills in the background (nfsmw_nativo_bc_a_etc2). Off decodes them, as before.
+            new Option("etc2", "Texturas en GPUs sin BC", "nfsmw_nativo_bc_a_etc2", "true",
+                    new String[] {"true", "false"},
+                    new String[] {"ETC2 · menos memoria y ancho de banda (Vulkan)", "Descomprimidas · como antes"}),
             new Option(RESOLUTION, "Resolución interna", "nfsmw_resolucion_interna", "1280x720",
                     new String[] {"640x360", "1024x576", "1280x720", "1920x1080"},
                     new String[] {"640x360 · máximo rendimiento", "1024x576 · rendimiento", "1280x720 · equilibrado",

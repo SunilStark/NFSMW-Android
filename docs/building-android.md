@@ -107,7 +107,16 @@ java -cp out/keyboard-tests com.nfsmw.android.KeyboardBindingsTest
 
 # the fast-core choice on known SoC layouts
 clang++ -std=c++17 tools/tests/android_nucleos_test.cpp -o out/android_nucleos_test.exe; out/android_nucleos_test.exe
+
+# BC to ETC2/EAC: every block decodes to the encoder's own error, every mode is used, quality and speed
+clang++ -std=c++20 -O2 tools/tests/texturas_etc_test.cpp -o out/texturas_etc_test.exe; out/texturas_etc_test.exe
+
+# its disk cache (needs sdk/thirdparty from step 1, for fmt and xxHash)
+clang++ -std=c++20 -O2 -DFMT_HEADER_ONLY -Itools/tests/rex_minimo -Isdk/thirdparty/fmt/include -Isdk/thirdparty/xxHash tools/tests/texturas_cache_etc_test.cpp -o out/texturas_cache_etc_test.exe; out/texturas_cache_etc_test.exe
 ```
+
+`tools/tests/texturas_etc_vulkan_test.cpp` runs on the tablet: it checks that its GPU decodes the transcoded blocks
+as the encoder's decoder does. Its first lines say how to build it with the NDK and run it over `adb`.
 
 `tools/tests/` also holds checks of the GPU driver probe, BC texture conversion, SPIR-V for Vulkan 1.1, GLES shaders,
 audio and memory; several run only on the device or with the SDK built, as their first lines say where they do.

@@ -5,6 +5,12 @@ Changes in this copy, newest first. Upstream's own history is in
 
 ## Unreleased
 
+- **ETC2 textures on GPUs without BC** (Mali, PowerVR; Vulkan). The game's BC1-5 textures stay compressed as ETC2
+  RGB8A1, ETC2 RGBA8 and EAC R11/RG11, the size of BC, instead of being decoded to 4 bytes a texel (2 for BC1). They
+  are transcoded in the background on the cores the game does not use and kept in a disk cache: the first time a
+  texture is seen it is still decoded, then it comes from the cache. Launcher: **Texturas en GPUs sin BC**. Checked
+  off-device: every block decodes to the encoder's error, Mesa's ETC2 decoder agrees on every texel, 38-50 dB PSNR
+  against the BC texels on synthetic textures (30-33 on pure noise). Not yet run on the tablet.
 - **Repository cleanup.** New README and changelog for this copy; one English build guide
   ([docs/building-android.md](docs/building-android.md)). Removed upstream's Switch build files (`pgo/`, `mesa/`,
   `tools/switch/`, `tools/build.ps1`, edition PGO tools), its release notes, planning and tester docs, and the Spanish

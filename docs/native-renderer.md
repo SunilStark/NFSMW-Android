@@ -141,6 +141,16 @@ Lessons that shaped the code (each one cost time to find):
   because every allocation is slow on the Switch (see [platform-notes.md](platform-notes.md#nvk-on-horizon)).
 - Untiling works on groups of 16 bytes with NEON (the processor's instructions for several values at once). The first
   version, block by block, cost around 30 ms each time a burst of new textures arrived.
+- GPUs without BC (Mali, PowerVR) cannot sample the game's DXT textures. They used to be decoded on the CPU to 4 bytes
+  a texel (2 for BC1), 4 to 8 times their size, which fills the texture cache that much sooner and costs the GPU that
+  much more bandwidth. Now (`nfsmw_nativo_bc_a_etc2`, Vulkan) they stay compressed as ETC2/EAC, which these GPUs
+  sample natively: BC1 as ETC2 RGB8A1, BC2/3 as ETC2 RGBA8, BC4/5 as EAC R11/RG11, block for block, the same size as
+  BC (`app/src/nfsmw_texturas_etc.h`). Transcoding takes microseconds per 4x4 block, far too slow for the ring thread,
+  so the first time a texture appears it is decoded as before and copied to threads on the cores the game does not use;
+  they transcode it into a disk cache (`app/src/nfsmw_texturas_cache_etc.cpp`, `cache/texturas_etc2_v<n>/`). The next
+  time the texture is created, the same zone later or the next session, its image is ETC2 and its blocks come from the
+  cache. Against the BC texels, the transcoded ones measure 38-50 dB PSNR on synthetic textures (30-33 on pure noise);
+  the log reports it for the first textures of each session.
 
 ### Game functions in native code
 

@@ -118,6 +118,8 @@ set(NFSMW_SOURCES
     # pipelines and render passes with the shaders from the library.
     src/nfsmw_nativo_dibujos.cpp
     src/nfsmw_nativo_texturas_pool.cpp
+    # nfsmw_nativo_bc_a_etc2: disk cache and threads of the BC textures transcoded to ETC2 (GPUs without BC).
+    src/nfsmw_texturas_cache_etc.cpp
     src/nfsmw_escenario_lod.cpp
     # The streamer requests the zone too late: facade popping and a hitch when entering a new
     # zone (hook on TrackStreamer::GetPredictedZone).
