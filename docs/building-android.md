@@ -76,6 +76,15 @@ Three traps of CMake on Windows that cost a lot of time:
    .\build_android.ps1 '-Pnfsmw.applicationIdSuffix=.dev'
    ```
 
+   On a PC with less than 16 GB of RAM, cap the parallelism:
+   `.\build_android.ps1 '-Pnfsmw.applicationIdSuffix=.dev' '-Pnfsmw.nativeJobs=3' '-Pnfsmw.ltoJobs=2'`. Compiles
+   with `-flto=thin` are light (0.1-0.4 GB per job, measured on the largest generated files); the optimizer runs at
+   the link, one ThinLTO thread per `ltoJobs`, and links never run beside compiles. With these values the first
+   full build took 47 minutes on a 4-core laptop with 7.8 GB.
+
+   If Gradle fails with "Unable to establish loopback connection", it was started from a sandboxed shell (an
+   agent's tool); run it from an ordinary terminal.
+
    Keep the quotes: PowerShell splits `-P...` at its dots. The suffix builds the package `com.nfsmw.android.dev`,
    named **NFS Most Wanted (dev)**, which installs beside the published app instead of replacing it. Both read the
    same game folder; each keeps its own saves and settings. Without the suffix the build replaces the published

@@ -23,6 +23,11 @@ def editions = [principal]
 // launcher name, the same game folder. Empty: the published package.
 def idSuffix = providers.gradleProperty('nfsmw.applicationIdSuffix').getOrElse('')
 if (!(idSuffix ==~ /(\.[a-z][a-z0-9_]{0,15})?/)) throw new GradleException('Invalid application ID suffix')
+// Native parallelism for a PC with little RAM (-Pnfsmw.nativeJobs=2 -Pnfsmw.ltoJobs=2); 0 leaves it to Ninja and
+// every core (src/main/cpp/CMakeLists.txt).
+def nativeJobs = providers.gradleProperty('nfsmw.nativeJobs').getOrElse('0')
+def ltoJobs = providers.gradleProperty('nfsmw.ltoJobs').getOrElse('0')
+if (!(nativeJobs ==~ /[0-9]{1,2}/) || !(ltoJobs ==~ /[0-9]{1,2}/)) throw new GradleException('Invalid job count')
 def editionsDir = providers.gradleProperty('nfsmw.editionsDir').orNull
 if (editionsDir != null) {
     if (editionId != 'pal_es') throw new GradleException('Multi-edition packages require the PAL base')
@@ -91,6 +96,7 @@ android {
                 cppFlags '-std=c++23'
                 arguments '-DANDROID_STL=c++_shared'
                 arguments "-DNFSMW_EDITION_APP=${editionApp}", "-DNFSMW_EDITION_LIBRARY=${editionLibrary}"
+                arguments "-DNFSMW_TRABAJOS=${nativeJobs}", "-DNFSMW_TRABAJOS_LTO=${ltoJobs}"
             }
         }
     }

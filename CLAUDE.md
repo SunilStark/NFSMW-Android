@@ -12,11 +12,20 @@ notes and planning docs, and replaced `README.md` and `CHANGELOG.md`. A merge th
 modify/delete or content conflicts: keep this copy's side (`git rm` the deleted ones), and move anything useful from
 upstream's release notes into `CHANGELOG.md` under an "Upstream" line.
 
-## Status at handover (2026-10-28)
+## Status at handover (2026-10-28, first local session)
 
-Everything after upstream 0.8.2 in this copy (`git log --oneline 5507002^..`) was written in a cloud session that had
-neither the NDK, nor the game, nor the tablet. **No commit of this copy has been built as an APK or run on the
-tablet.** The plan's steps 1 to 5 and the English launcher are done in code; steps 6 to 9 are not started.
+**Built, installed, not yet launched.** The first local session (on the owner's Windows PC) built rexglue, ran the
+code generator and built the `.dev` APK from this copy with no compile errors in the never-compiled code below; it is
+installed on the tablet as `com.nfsmw.android.dev`, and the game folder (from the owner's ISO) is in
+`/sdcard/nsfmw-androidevolved/`. **It has not been started on the tablet yet**: the next step is the smoke test with
+the owner (launch, All files access, shader library build, a race), then "Next" step 1.
+
+On this PC, the asset-free tests pass: the three Java tests in `docs/building-android.md`, and `android_nucleos`,
+`texturas_etc`, `tamano_pantalla`, `android_termico`, `spirv_precision`, `texturas_cache_etc` (after a Windows fix).
+
+Earlier, everything after upstream 0.8.2 (`git log --oneline 5507002^..`) was written in a cloud session that had
+neither the NDK, nor the game, nor the tablet. The plan's steps 1 to 5 and the English launcher are done in code;
+steps 6 to 9 are not started.
 
 What was checked, off-device only:
 
@@ -28,7 +37,8 @@ What was checked, off-device only:
   with a stub `android/*.h`.
 - The Java sources parse against `android-all` (only SDL, androidx, `R` and `BuildConfig` were missing).
 
-Never compiled, so the first build is where they meet the real toolchain:
+Never compiled before the first local session; all of them now compile with NDK 28.2 (ADPF and thermal symbols,
+ETC2 cache and the new log lines are in `libmain.so`), but none has run yet:
 
 - The `REX_PLATFORM_ANDROID` / `__ANDROID__` branches: the ADPF calls in `app/src/nfsmw_espera_fotograma.cpp` and
   `nfsmw_nativo_sistema.cpp`, the thread pinning in `app/src/nfsmw_texturas_cache_etc.cpp`, and
@@ -53,10 +63,11 @@ Never compiled, so the first build is where they meet the real toolchain:
 
 ### Open points
 
-- Ask the owner: the tablet's RAM (6 or 8 GB) and Android / One UI version; whether the published app is installed
-  with the game in `/sdcard/nsfmw-androidevolved/` (step 2 of the build pulls `default.xex` from there).
-- `Diagnostics.EMAIL` and `Diagnostics.ISSUES` still send crash reports to upstream's author and issue tracker.
-  Ask the owner where this copy's reports should go before anyone uses **Send crash or log**.
+- Answered 2026-10-28: the tablet has 6 GB and Android 16 / One UI 8.5 (see "The tablet"). The published app is
+  **not** installed: the game came from the owner's ISO (`Desktop\Need for Speed - Most Wanted (Spain)\...iso`,
+  PAL Spain hash confirmed) and was copied to the tablet. Crash reports now go to the owner (`Diagnostics.java`).
+- The owner keeps a list of everything installed for this project outside the repository
+  (`Downloads\Claude Projects\NFSMW-cleanup-list.md`): add to it whatever a session downloads or installs.
 - Still in Spanish: log text (by rule), and the cvar descriptions in the in-game settings overlay. Speech and movies
   are Spanish on the PAL Spain disc and cannot change.
 - The OpenGL ES backend still decodes BC textures (no ETC2 there), and the HUD is stretched at 16:10, as it is at
@@ -81,7 +92,9 @@ From Samsung's specifications and the owner's screenshots (2112x1320). **Confirm
 commands below and correct this section:
 
 - Exynos 1380: 4 Cortex-A55 at 2.0 GHz + 4 Cortex-A78 at 2.4 GHz; Mali-G68 MP5 (no BC textures, 4 descriptor sets).
-- 6 or 8 GB RAM; 10.9" 2112x1320 (16:10), 90 Hz.
+- 10.9" 2112x1320 (16:10), 90 Hz.
+- Read over adb on 2026-10-28: SM-X400 (`gts10litewifieea`), `ro.soc.model` s5e8835 (Exynos 1380), **6 GB**
+  (MemTotal 5.84 GB), **Android 16 (API 36), One UI 8.5**, build X400XXS8CZI2. The rest is confirmed in step 1.
 
 ```powershell
 New-Item -ItemType Directory -Force out | Out-Null
@@ -109,8 +122,11 @@ Install, and check each with `--version` or its path:
   PowerShell, and long builds with `Start-Process` and a log file). The SDK's `cmake;3.30.5` brings a Ninja: use it.
 - Visual Studio 2022 Build Tools, C++ workload (MSVC + Windows SDK): clang on Windows needs them. Load `vcvars64.bat`
   in the shell, then put LLVM's `bin` and the SDK's CMake first on `PATH`.
-- About 16 GB of RAM: the generated code is about 144 MB of C++, and the ThinLTO link is heavy. If the link runs out
-  of memory, lower `--thinlto-jobs` in `android/app/src/main/cpp/CMakeLists.txt`.
+- About 16 GB of RAM: the generated code is about 144 MB of C++, and the ThinLTO link is heavy. With less, cap the
+  build with `-Pnfsmw.nativeJobs=3 -Pnfsmw.ltoJobs=2` (see `docs/building-android.md`, step 5); the owner's PC has
+  7.8 GB and builds with those in 47 minutes.
+- Gradle cannot open its loopback socket from an agent's sandboxed shell, even with the sandbox off: run it from the
+  Terminal panel (a script with `Start-Process gradlew.bat -WorkingDirectory android ...` and a log file).
 
 ## Build, from a fresh clone
 

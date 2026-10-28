@@ -5,6 +5,11 @@ Changes in this copy, newest first. Upstream's own history is in
 
 ## Unreleased
 
+- **First build of this copy** (2026-10-28), on a Windows PC with 7.8 GB of RAM: rexglue, the code generator (265
+  files, 139 MB of C++), and the `.dev` APK (31 MB, `libmain.so` 40 MB) in 47 minutes; installed on the tablet. Not
+  yet launched there. Fixes on the way: the host build on Windows (Visual Studio Build Tools, `-march=x86-64-v2`,
+  `socklen_t`), the ETC2 cache test on Windows, and `-Pnfsmw.nativeJobs` / `-Pnfsmw.ltoJobs` to cap the build's
+  parallelism on a PC with little RAM. Crash reports go to this copy's owner.
 - **English.** The launcher (options, dialogs, saved-game manager, touch-control editor and hints, diagnostics,
   shader builder messages) is in English, and the game's text and menus default to English (the PAL disc carries
   it); speech and movies stay in the disc's language. Edition names in English.

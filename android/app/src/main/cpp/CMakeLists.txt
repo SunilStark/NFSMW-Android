@@ -22,6 +22,17 @@ set(REXGLUE_RECOMP_DEBUG_INFO "none" CACHE STRING "Omit debug tables for the lar
 set(SDL_SHARED ON CACHE BOOL "SDL shared library loaded by SDLActivity" FORCE)
 set(SDL_STATIC OFF CACHE BOOL "Use SDL's shared Android library" FORCE)
 
+# Parallel jobs on a PC with little RAM (-Pnfsmw.nativeJobs / -Pnfsmw.ltoJobs from Gradle). 0: Ninja's own
+# choice and every logical core for ThinLTO. Set before the targets are created: CMAKE_JOB_POOL_* only seeds new
+# targets. Links get a pool of one, so the ThinLTO link never runs beside other compiles.
+set(NFSMW_TRABAJOS 0 CACHE STRING "Compilaciones a la vez (0: las que elija Ninja)")
+set(NFSMW_TRABAJOS_LTO 0 CACHE STRING "Hilos de ThinLTO al enlazar (0: todos los nucleos logicos)")
+if(NFSMW_TRABAJOS GREATER 0)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS nfsmw_compilar=${NFSMW_TRABAJOS} nfsmw_enlazar=1)
+    set(CMAKE_JOB_POOL_COMPILE nfsmw_compilar)
+    set(CMAKE_JOB_POOL_LINK nfsmw_enlazar)
+endif()
+
 set(NFSMW_EDITION_APP "app" CACHE STRING "Prepared edition source tree")
 if(NOT NFSMW_EDITION_APP MATCHES "^(app|app_[a-z][a-z0-9_]*)$")
     message(FATAL_ERROR "Invalid edition source tree")
@@ -75,7 +86,11 @@ if(NFSMW_ANDROID_LTO AND CMAKE_BUILD_TYPE STREQUAL "Release")
             target_compile_options(${objetivo} PRIVATE -flto=thin)
         endif()
     endforeach()
-    cmake_host_system_information(RESULT NFSMW_NUCLEOS QUERY NUMBER_OF_LOGICAL_CORES)
+    if(NFSMW_TRABAJOS_LTO GREATER 0)
+        set(NFSMW_NUCLEOS ${NFSMW_TRABAJOS_LTO})
+    else()
+        cmake_host_system_information(RESULT NFSMW_NUCLEOS QUERY NUMBER_OF_LOGICAL_CORES)
+    endif()
     target_link_options(nfsmw PRIVATE -flto=thin "-Wl,--thinlto-jobs=${NFSMW_NUCLEOS}"
                         "-Wl,--thinlto-cache-dir=${CMAKE_BINARY_DIR}/thinlto-cache")
     # Hot code together, as orden_funciones.ld does on the Switch; lld has no section ordering file for GCC,
