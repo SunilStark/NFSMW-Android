@@ -30,7 +30,7 @@ const sha256 = async (bytes) => hex(await crypto.subtle.digest('SHA-256', bytes)
 async function fetchBytes(url) {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`no se pudo leer ${url} (${response.status})`);
+    throw new Error(`could not read ${url} (${response.status})`);
   }
   return new Uint8Array(await response.arrayBuffer());
 }
@@ -39,7 +39,7 @@ async function fetchBytes(url) {
 async function scanFile(scanner, file, onBytes) {
   const response = await fetch(GAME + file.path.split('/').map(encodeURIComponent).join('/'));
   if (!response.ok || !response.body) {
-    throw new Error(`no se pudo leer ${file.path}`);
+    throw new Error(`could not read ${file.path}`);
   }
   scanner.beginFile(file.path, file.size);
   const reader = response.body.getReader();
@@ -71,7 +71,7 @@ async function scanFile(scanner, file, onBytes) {
     }
   }
   if (seen !== file.size) {
-    throw new Error(`${file.path}: se leyeron ${seen} de ${file.size} bytes`);
+    throw new Error(`${file.path}: read ${seen} of ${file.size} bytes`);
   }
   flush(true);
 }
@@ -81,24 +81,24 @@ async function scanFile(scanner, file, onBytes) {
 function containersOfLibrary(library) {
   const view = new DataView(library.buffer, library.byteOffset, library.byteLength);
   if (library.length < 24 || hex(library.subarray(0, 8)) !== '4e46535350560000' || view.getUint32(8, true) !== 1) {
-    throw new Error('nfsmw_shaders.nfsp no es válida');
+    throw new Error('nfsmw_shaders.nfsp is not valid');
   }
   const count = view.getUint32(12, true);
   if (!count || count > 4096) {
-    throw new Error('nfsmw_shaders.nfsp no es válida');
+    throw new Error('nfsmw_shaders.nfsp is not valid');
   }
   const containers = [];
   let offset = 24;
   for (let i = 0; i < count; i++) {
     if (offset + 16 > library.length) {
-      throw new Error('nfsmw_shaders.nfsp está cortada');
+      throw new Error('nfsmw_shaders.nfsp is truncated');
     }
     const original = view.getUint32(offset, true);
     const words = view.getUint32(offset + 4, true);
     offset += 16;
     if (original < 24 || original > 65536 || words < 5 || words > 1024 * 1024 ||
         offset + original + words * 4 > library.length) {
-      throw new Error('nfsmw_shaders.nfsp no es válida');
+      throw new Error('nfsmw_shaders.nfsp is not valid');
     }
     const bytes = library.slice(offset, offset + original);
     containers.push({ name: `${bytes[3] & 1 ? 'v' : 'p'}_${String(i).padStart(6, '0')}.bin`, bytes });
@@ -109,7 +109,7 @@ function containersOfLibrary(library) {
 
 // The OpenGL ES library (nfsmw_shaders_gles.nfsp), from the containers of the Vulkan one.
 async function mainGles(modules, shaderCommon, manifest) {
-  progress(0.02, 'Leyendo nfsmw_shaders.nfsp…');
+  progress(0.02, 'Reading nfsmw_shaders.nfsp…');
   const containers = containersOfLibrary(await fetchBytes(GAME + 'nfsmw_shaders.nfsp'));
   const blurShas = new Set(manifest.builds.map((b) => b.blur_container_sha256));
   let blurShader = null;
@@ -120,12 +120,12 @@ async function mainGles(modules, shaderCommon, manifest) {
     }
   }
   if (!blurShader) {
-    throw new Error('no se encontró el shader de composición en nfsmw_shaders.nfsp');
+    throw new Error('the composition shader was not found in nfsmw_shaders.nfsp');
   }
-  progress(0.1, `${containers.length} shaders. Traduciendo para OpenGL ES…`);
+  progress(0.1, `${containers.length} shaders. Translating for OpenGL ES…`);
   let compiled = 0;
   const library = await buildShaderLibrary(containers, modules, shaderCommon, (text) => {
-    if (text.startsWith('Compilados')) {
+    if (text.startsWith('Compiled')) {
       compiled += 25;
       progress(0.15 + 0.83 * (compiled / containers.length), text);
     } else {
@@ -136,8 +136,8 @@ async function mainGles(modules, shaderCommon, manifest) {
 }
 
 async function main() {
-  setLanguage('es');
-  progress(0, 'Cargando el compilador de shaders…');
+  setLanguage('en');
+  progress(0, 'Loading the shader compiler…');
   const quiet = () => ({ print: () => {}, printErr: () => {} });
   const [hlsl, dxc, pack, lzx] = await Promise.all([
     createHlslModule(quiet()), createDxcModule(quiet()), createPackModule(quiet()), createLzxModule(quiet()),
@@ -149,15 +149,15 @@ async function main() {
     return;
   }
 
-  progress(0.02, 'Leyendo default.xex…');
+  progress(0.02, 'Reading default.xex…');
   const xex = await fetchBytes(GAME + 'default.xex');
   const xexHash = await sha256(xex);
   const build = manifest.builds.find((b) => b.xex_sha256 === xexHash);
-  if (!build) throw new Error('Esta edición no tiene una receta de shaders verificada.');
+  if (!build) throw new Error('This edition has no verified shader recipe.');
   const { image } = await readXexImage(xex, async (compressed, bits, size) => {
     lzx.FS.writeFile('/i.lzx', compressed);
     if (lzx.callMain(['/i.lzx', '/i.bin', String(bits), String(size)])) {
-      throw new Error('fallo al descomprimir default.xex');
+      throw new Error('default.xex failed to decompress');
     }
     return lzx.FS.readFile('/i.bin');
   });
@@ -172,11 +172,11 @@ async function main() {
   for (const f of files) {
     await scanFile(disc, f, (n) => {
       read += n;
-      progress(0.03 + 0.37 * (read / total), `Buscando shaders en ${f.path}…`);
+      progress(0.03 + 0.37 * (read / total), `Searching for shaders in ${f.path}…`);
     });
   }
   const containers = [...disc.found, ...executable.found];
-  progress(0.4, `Encontrados ${containers.length} shaders. Traduciendo…`);
+  progress(0.4, `Found ${containers.length} shaders. Translating…`);
 
   const blurSha = build.blur_container_sha256;
   let blurShader = null;
@@ -187,12 +187,12 @@ async function main() {
     }
   }
   if (!blurShader) {
-    throw new Error('no se encontró el shader de composición: ¿es una copia completa del juego?');
+    throw new Error('the composition shader was not found: is this a complete copy of the game?');
   }
 
   let compiled = 0;
   const library = await buildShaderLibrary(containers, { hlsl, dxc, pack }, shaderCommon, (text) => {
-    if (text.startsWith('Compilados')) {
+    if (text.startsWith('Compiled')) {
       compiled += 25;
       progress(0.45 + 0.53 * (compiled / containers.length), text);
     } else {
@@ -200,13 +200,13 @@ async function main() {
     }
   }, blurShader);
 
-  progress(0.99, 'Comprobando la biblioteca…');
+  progress(0.99, 'Checking the library…');
   const libraryHash = await sha256(library);
   // Android's library differs from the Switch one on purpose: its shader_common.h has no 64-bit pointer path
   // (Vulkan 1.1 and drivers without shaderInt64), so it is checked against its own SHA-256 per executable.
   const expected = ANDROID_LIBRARIES[xexHash];
   if (expected && libraryHash !== expected) {
-    throw new Error(`la biblioteca no coincide con la esperada (${libraryHash.slice(0, 12)}…)`);
+    throw new Error(`the library does not match the expected one (${libraryHash.slice(0, 12)}…)`);
   }
   await finish(library, build ? build.edition : '');
 }

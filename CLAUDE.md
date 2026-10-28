@@ -19,8 +19,10 @@ upstream's release notes into `CHANGELOG.md` under an "Upstream" line.
   check `git status` before every commit. The repository is private, but it is still a copy on GitHub.
 - GitHub Actions cannot build this (the build needs the generated code): `.github/workflows/android.yml` is manual
   only. **Builds and tests happen on this PC and on the tablet.**
-- Follow the code's own style: identifiers, cvars and log text in Spanish, comments in English. Commit subjects start
-  with the area (`android: ...`), the body says why and what was checked, including whether it ran on the tablet.
+- Follow the code's own style: identifiers, cvars and log text in Spanish, comments in English. The launcher's UI text
+  is English in this copy (the owner's language); upstream's is Spanish, so merges conflict there: keep English. Commit
+  subjects start with the area (`android: ...`), the body says why and what was checked, including whether it ran on the
+  tablet.
 - Say plainly what was measured on the tablet and what was not. Never present a build that compiled as one that works.
 
 ## The tablet
@@ -42,7 +44,7 @@ adb shell cat /proc/meminfo | Select-Object -First 2
 ```
 
 The Vulkan renderer needs the descriptor-indexing features (README, Requirements). Without them the launcher's
-**API gráfica → OpenGL ES** is the path.
+**Graphics API → OpenGL ES** is the path.
 
 ## One-time setup
 
@@ -83,7 +85,7 @@ The same steps, with more detail, are in `docs/building-android.md`; keep both i
    PowerShell splits `-P...` at its dots). The suffix gives the build its own package (`com.nfsmw.android.dev`) and
    launcher name, so it installs **beside** the published app instead of replacing it; both read the same game
    folder. Without the suffix it replaces the published package, which has another signature: Android then asks to
-   uninstall it, and that deletes its saves (export them first from **Partidas guardadas**).
+   uninstall it, and that deletes its saves (export them first from **Saved games**).
    Output: `android\app\build\outputs\apk\release\app-release.apk`.
 6. **Install and run**: `adb install -r android\app\build\outputs\apk\release\app-release.apk`, open
    **NFS Most Wanted (dev)**, allow **All files access**, and play. The first run of a new package may rebuild the
@@ -94,10 +96,10 @@ The same steps, with more detail, are in `docs/building-android.md`; keep both i
 `tools/android/comprobar_tableta.ps1` runs the checks of step 1 below; these are the pieces it uses.
 
 - Log: `adb logcat -s NFSMW-rex NFSMW` (the game's own log goes to logcat under `NFSMW-rex`; the launcher's
-  **Enviar crash o log** makes a ZIP with the native logs too).
+  **Send crash or log** makes a ZIP with the native logs too).
 - Fast cores: at start the log lists each core (`[android] nucleos (cpu:reloj/capacidad/parte): ...`) and should then
   say `juego en los nucleos 4,5,6,7` on the Exynos 1380.
-- Keyboard: launcher **TECLADO → Jugar con teclado**, then **Teclas** to remap (for example W to RT and S to LT).
+- Keyboard: launcher **KEYBOARD → Play with keyboard**, then **Keys** to remap (for example W to RT and S to LT).
   Connect the Bluetooth controller and the keyboard **in the middle of a race**: the game must carry on.
 - Frame rate, on the same race and route each time, with the same settings and the tablet at the same temperature:
 
@@ -115,10 +117,11 @@ Asset-free tests (no game needed): the commands at the end of `docs/building-and
 
 ## Starting settings for the tablet
 
-Launcher options: API gráfica **Vulkan** (if the GPU has descriptor indexing), Resolución interna **1024x576** first
-(the code measured that 640x360 does not lower the scene's resolution), Límite de FPS **60** (the launcher then picks
-the display's 60 Hz mode), Sombras **cada 2 fotogramas**, Reflejos del coche **Medios**, Antialiasing and Filtro off,
-Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unrestricted**, Game Booster on.
+Launcher options: Graphics API **Vulkan** (if the GPU has descriptor indexing), Internal resolution **1024x576**
+first (the code measured that 640x360 does not lower the scene's resolution), FPS limit **60** (the launcher then
+picks the display's 60 Hz mode), Shadows **Every 2 frames**, Car reflections **Medium**, Antialiasing and Image
+filter off, Graphics stability **Automatic**, Text language **English** (the default). On the tablet: the app's
+battery use **Unrestricted**, Game Booster on.
 
 ## Done in this copy
 
@@ -126,7 +129,7 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
   (`android/app/src/main/cpp/android_rendimiento.cpp`, choice in `android_nucleos.h`) left every core on the Exynos
   1380; it now excludes the A55s by MIDR or capacity. Tested on known layouts, not yet on the tablet.
 - `android: keyboard play and key binds in the launcher; no restart on hot-plug`: `GameActivity`'s configChanges
-  as SDL's own, the launcher's TECLADO section (`KeyboardBindings.java`), touch controls hidden while the keyboard
+  as SDL's own, the launcher's KEYBOARD section (`KeyboardBindings.java`), touch controls hidden while the keyboard
   plays. Compiled and tested off-device, not yet on the tablet.
 - The `.dev` package suffix, `build_android.ps1` passing its arguments to Gradle, and the manual-only workflow.
 - Cleanup: this copy's own `README.md`, `CHANGELOG.md` and `docs/building-android.md`; upstream's Switch build files
@@ -137,26 +140,26 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
   RGB8A1, BC2/3 to ETC2 RGBA8, BC4/5 to EAC R11/RG11 (`app/src/nfsmw_texturas_etc.h`), transcoded in the background
   on the little cores into a disk cache (`app/src/nfsmw_texturas_cache_etc.cpp`, under the game's cache folder,
   `texturas_etc2_v1/`); a texture is decoded as before the first time, ETC2 from then on. cvars
-  `nfsmw_nativo_bc_a_etc2` (launcher: **Texturas en GPUs sin BC**), `nfsmw_nativo_etc2_cache_mb`,
+  `nfsmw_nativo_bc_a_etc2` (launcher: **Textures on GPUs without BC**), `nfsmw_nativo_etc2_cache_mb`,
   `nfsmw_nativo_etc2_hilos`; the SDK now enables `textureCompressionETC2`. Checked off-device (encoder, cache, and
   Mesa's ETC2 decoder against ours on every texel); not yet on the tablet.
 - `android: half precision keeps the shadow map and pow at 32 bits` (step 3 below): `nfsmw_nativo_media_precision`
   relaxed every result computed from a texture, the shadow map too, which the game samples as an ordinary texture
   and compares with the pixel's depth (at 16 bits, steps of 0.0005 near 1.0: shadow acne). Now its samples, found by
   tfetch2DSombraMin's marker, stay at 32 bits, and so do pow/exp/log with what feeds them; a shader whose shadow
-  samples cannot be found is left alone. Launcher: **Precisión del color**. Tested on glslang-compiled shaders
+  samples cannot be found is left alone. Launcher: **Color precision**. Tested on glslang-compiled shaders
   shaped like the library's (`tools/tests/spirv_precision_test.cpp`; spirv-val passes); not yet on the tablet.
 - `android: ADPF session and thermal step-down` (step 4 below): `android/app/src/main/cpp/android_ritmo.cpp`. The
   preparer, executor and ring threads in an `APerformanceHint` session (API 33+); each frame, at the ring's Swap, the
   busiest one's CPU time is reported against 1/`nfsmw_limite_fps`. A thread reads `AThermal_getThermalHeadroom` (10 s
   ahead) every 2 s and sets a floor under the 30 FPS guard's shadow steps (0.85: one map, 0.95: no cast shadows;
   back one level per minute under 0.70; policy in `android_termico.h`). Loaded with dlsym (minSdk 26). Launcher:
-  **Control térmico**, **Ayuda al sistema (ADPF)**, **Núcleos del juego**. Policy tested off-device; not on the tablet.
+  **Thermal control**, **System performance hints (ADPF)**, **Game cores**. Policy tested off-device; not on the tablet.
 - `android: 16:10 internal sizes and the narrower screen proportion` (step 5 below): `nfsmw_proporcion_pantalla`
   below 16:9 draws narrower at the same height, and `nfsmw_resolucion_interna` gains 1056x660 and 1280x800, both
   16:10 whatever the proportion (sizes in `app/src/nfsmw_tamano_pantalla.h`). The camera is left alone when
   narrower: the game's projection already shows more above and below (Vert+); the presenters show that front
-  buffer at its own proportion. Launcher: the two sizes and **Proporción de imagen → La de la pantalla**. Sizes
+  buffer at its own proportion. Launcher: the two sizes and **Aspect ratio → The screen's**. Sizes
   tested off-device; not on the tablet.
 
 ## Next, in order (each measured on the tablet before and after)
@@ -169,20 +172,20 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
    `out/tablet/paso1.txt`, goes into the commit or into "Done in this copy".
 2. **Confirm the ETC2 textures on the tablet** (done in code, see above):
    - The GPU decodes our blocks as our decoder does: build and run `tools/tests/texturas_etc_vulkan_test.cpp` over
-     adb (its first lines). It must print PASS for the four formats; if not, set **Texturas en GPUs sin BC →
-     Descomprimidas** and report which format differs.
+     adb (its first lines). It must print PASS for the four formats; if not, set **Textures on GPUs without BC →
+     Decompressed** and report which format differs.
    - The log at start: `[compatibilidad] BC1: ETC2 RGB8A1 si esta en la cache del disco...` for each BC format (or
      why not), and `ETC2: cache de texturas en ... N texturas`. During play, every 512 BC textures, `[compatibilidad]
      ETC2: ... desde la cache, ... convertidas al momento ..., ... decodificadas` (on a first session almost all
      decoded; on the second, mostly from the cache) and, after the first textures, their PSNR.
    - Look in a full race (second session, cache warm) for wrong colors, black or transparent patches, or blocky
-     gradients on the road, buildings, signs and the car. Then measure against **Descomprimidas** on the same route:
+     gradients on the road, buildings, signs and the car. Then measure against **Decompressed** on the same route:
      FPS, the 95th/99th percentile frame times, temperature, and the texture cache line (`[nativo] C3 diag cache:
      ... MB`). Watch that `convertidas al momento` stays near 0 (it is ring time) and how fast the cache fills.
    - The OpenGL ES backend still decodes BC (its own path in `app/src/nfsmw_nativo_dibujos_gles.cpp`); if the tablet
      ends up on GLES, port the same lookup there.
-3. **Try half precision on the tablet** (the pass is fixed, see "Done"): launcher **Precisión del color → 16
-   bits**, both backends. It changes the shaders, so the first race after switching compiles pipelines: play one
+3. **Try half precision on the tablet** (the pass is fixed, see "Done"): launcher **Color precision → 16 bits**, both
+   backends. It changes the shaders, so the first race after switching compiles pipelines: play one
    race before measuring.
    - The log: `[nativo] C5a: media precision en N pixel shaders (M resultados a 16 bits). A 32 bits: S muestras del
      mapa de sombras en K shaders, P pow/exp/log...`. K must be above 0 (the library's world shaders sample the
@@ -202,15 +205,15 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
    - Every 30 s `[ritmo] ADPF, ultimos 30 s: ...`: the busiest thread's CPU time against the budget, how many frames
      went over it, and what each report costs (keep it under ~50 us; it runs on the ring thread). Every minute
      `[termico] ultimo minuto: margen max ...`, and a line on each level change.
-   - Three 20-minute sessions on the same route, from a cool tablet (launcher options): all on; **Ayuda al sistema
-     (ADPF) → Desactivada**; and **Núcleos del juego → Los que decida Android** with ADPF on. For each: FPS, the
+   - Three 20-minute sessions on the same route, from a cool tablet (launcher options): all on; **System performance
+     hints (ADPF) → Off**; and **Game cores → Let Android decide** with ADPF on. For each: FPS, the
      95th/99th percentile frame times, temperature (`dumpsys thermalservice`), battery drain per hour, and the
      seconds per thermal level. Keep the pinning only if it still wins with ADPF on; if Android's choice with ADPF
      is as good, it is the better default (it adapts to other SoCs).
    - The thresholds are cvars (`nfsmw_android_termico_nivel1_pct` 85, `_nivel2_pct` 95, `_volver_pct` 70,
      `_volver_s` 60): if the tablet throttles before level 1 kicks in, lower `nivel1`.
-5. **Check 16:10 on the tablet** (done in code, see "Done"): launcher **Resolución interna → 1056x660** (or
-   1280x800, or **Proporción de imagen → La de la pantalla** with 1024x576/1280x720: 928x576 and 1152x720).
+5. **Check 16:10 on the tablet** (done in code, see "Done"): launcher **Internal resolution → 1056x660** (or
+   1280x800, or **Aspect ratio → The screen's** with 1024x576/1280x720: 928x576 and 1152x720).
    - The log: `[resolucion] modo 4 preparado a 1056x672 (area visible 1056x660): el panoramico`, `salida del juego
      al arrancar: 1056x660, impuesta`, `[panoramico] vista 1: destino 1056x672, mas estrecho que 16:9: ... se deja
      como esta` (no `k` line: the camera is not corrected).

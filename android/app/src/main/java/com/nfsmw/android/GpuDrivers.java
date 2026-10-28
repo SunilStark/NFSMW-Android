@@ -55,29 +55,29 @@ final class GpuDrivers {
         return selectedId(context) + ":" + Build.FINGERPRINT + ":" + ReleaseUpdates.installed(context);
     }
     static Driver importZip(Context context, Uri uri) throws Exception {
-        if (Build.VERSION.SDK_INT < 28) throw new IOException("Los drivers externos necesitan Android 9 o posterior.");
+        if (Build.VERSION.SDK_INT < 28) throw new IOException("External drivers need Android 9 or later.");
         File stage = new File(root(context), ".import-" + UUID.randomUUID());
-        if (!stage.mkdirs()) throw new IOException("No se pudo crear la carpeta del driver.");
+        if (!stage.mkdirs()) throw new IOException("The driver folder could not be created.");
         try {
             InputStream input = context.getContentResolver().openInputStream(uri);
-            if (input == null) throw new IOException("No se pudo abrir el ZIP.");
+            if (input == null) throw new IOException("The ZIP could not be opened.");
             DriverArchive.extract(input, stage);
             File packageRoot = findMeta(stage);
-            if (packageRoot == null) throw new IOException("Falta meta.json en el ZIP del driver.");
+            if (packageRoot == null) throw new IOException("meta.json is missing from the driver ZIP.");
             JSONObject meta = new JSONObject(new String(Files.readAllBytes(new File(packageRoot, "meta.json").toPath()), StandardCharsets.UTF_8));
             String library = meta.getString("libraryName");
-            if (!library.matches("[A-Za-z0-9_.+-]+\\.so")) throw new IOException("libraryName no es válido.");
+            if (!library.matches("[A-Za-z0-9_.+-]+\\.so")) throw new IOException("libraryName is not valid.");
             if (meta.optInt("minApi", 26) > Build.VERSION.SDK_INT)
-                throw new IOException("Este driver necesita una versión más reciente de Android.");
+                throw new IOException("This driver needs a newer version of Android.");
             DriverArchive.validateLibrary(new File(packageRoot, library));
             String name = meta.optString("name", library);
-            if (name.trim().isEmpty() || name.length() > 120) throw new IOException("Nombre de driver no válido.");
+            if (name.trim().isEmpty() || name.length() > 120) throw new IOException("Invalid driver name.");
             // Keep dependencies alongside the main library, including ZIPs with a wrapper directory.
             String relative = "payload";
             File installed = new File(root(context), UUID.randomUUID().toString());
-            if (!installed.mkdirs()) throw new IOException("No se pudo instalar el driver.");
+            if (!installed.mkdirs()) throw new IOException("The driver could not be installed.");
             try {
-                if (!packageRoot.renameTo(new File(installed, relative))) throw new IOException("No se pudo instalar el paquete.");
+                if (!packageRoot.renameTo(new File(installed, relative))) throw new IOException("The package could not be installed.");
                 JSONObject record = new JSONObject().put("name", name).put("libraryName", library).put("folder", relative);
                 Files.write(new File(installed, "driver.json").toPath(), record.toString().getBytes(StandardCharsets.UTF_8));
                 readOnly(new File(installed, relative));
@@ -94,7 +94,7 @@ final class GpuDrivers {
         if (children != null) for (File child : children) {
             File candidate = findMeta(child);
             if (candidate != null) {
-                if (found != null) throw new IOException("Hay varios meta.json; el paquete es ambiguo.");
+                if (found != null) throw new IOException("There are several meta.json files; the package is ambiguous.");
                 found = candidate;
             }
         }
@@ -103,12 +103,12 @@ final class GpuDrivers {
     private static void readOnly(File file) throws IOException {
         File[] children = file.listFiles();
         if (children != null) for (File child : children) readOnly(child);
-        else if (!file.setReadOnly()) throw new IOException("No se pudo proteger la biblioteca del driver.");
+        else if (!file.setReadOnly()) throw new IOException("The driver library could not be protected.");
     }
     static void remove(Context context, Driver driver) throws IOException {
         File target = new File(root(context), driver.id);
         if (!target.getCanonicalFile().getParentFile().equals(root(context).getCanonicalFile()))
-            throw new IOException("Ruta de driver no válida.");
+            throw new IOException("Invalid driver path.");
         DriverArchive.delete(target);
         if (selectedId(context).equals(driver.id)) select(context, "");
     }

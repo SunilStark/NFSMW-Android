@@ -55,7 +55,7 @@ public class LanServerService extends Service {
     public void onCreate() {
         super.onCreate();
         NotificationManager nm = getSystemService(NotificationManager.class);
-        NotificationChannel channel = new NotificationChannel(CHANNEL, "Servidor LAN",
+        NotificationChannel channel = new NotificationChannel(CHANNEL, "LAN server",
                 NotificationManager.IMPORTANCE_LOW);
         channel.setShowBadge(false);
         nm.createNotificationChannel(channel);
@@ -125,8 +125,8 @@ public class LanServerService extends Service {
     private Notification notification() {
         String ip = ServidorEa.ipLocal();
         int players = server != null ? server.jugadores() : 0;
-        String text = ip == null ? "Sin Wi-Fi ni punto de acceso: nadie puede unirse"
-                : "IP " + ip + " · " + players + (players == 1 ? " jugador" : " jugadores");
+        String text = ip == null ? "No Wi-Fi or hotspot: nobody can join"
+                : "IP " + ip + " · " + players + (players == 1 ? " player" : " players");
         PendingIntent open = PendingIntent.getActivity(this, 0,
                 new Intent(this, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE);
@@ -134,12 +134,12 @@ public class LanServerService extends Service {
                 new Intent(this, LanServerService.class).setAction(STOP), PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_upload_done)
-                .setContentTitle("Servidor LAN de NFSMW")
+                .setContentTitle("NFSMW LAN server")
                 .setContentText(text)
                 .setContentIntent(open)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .addAction(new Notification.Action.Builder(null, "Detener", stop).build())
+                .addAction(new Notification.Action.Builder(null, "Stop", stop).build())
                 .build();
     }
 

@@ -3,7 +3,7 @@ package com.nfsmw.android;
 /** Host-side checks: javac -d out/... CompiledEditions.java CompiledEditionsTest.java */
 public final class CompiledEditionsTest {
     private static final String PAL = "a".repeat(64), USA = "b".repeat(64);
-    private static final String ROW = "pal_es|PAL España|" + PAL + "|5|31|main";
+    private static final String ROW = "pal_es|PAL Spain|" + PAL + "|5|31|main";
     private static void reject(String text) {
         try { CompiledEditions.parse(text); }
         catch (IllegalArgumentException expected) { return; }

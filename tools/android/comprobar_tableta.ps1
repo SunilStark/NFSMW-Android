@@ -87,8 +87,8 @@ Anotar 'INFO' ("$Paquete $version".Trim())
 # --- Start-up: cores and arguments -----------------------------------------------------------------------
 & adb logcat -b main -b system -b events -c
 Write-Host ''
-Write-Host 'On the tablet: open the launcher, TECLADO -> Jugar con teclado ON (remap a key in Teclas if you want to'
-Write-Host 'test that too), then Jugar. Start a race, drive a few seconds with the keyboard.'
+Write-Host 'On the tablet: open the launcher, KEYBOARD -> Play with keyboard ON (remap a key in Keys if you want to'
+Write-Host 'test that too), then Play. Start a race, drive a few seconds with the keyboard.'
 Read-Host 'Press Enter here when you are in the race' | Out-Null
 $arranque = (& adb logcat -d -v time -s NFSMW-rex NFSMW SDL | Out-String)
 Guardar 'arranque.txt' $arranque
@@ -111,7 +111,7 @@ elseif ($argumentos.Groups[1].Value -match '--mnk_mode=true') {
     Anotar 'OK' 'keyboard play passed to the game (--mnk_mode=true)'
     $teclas = [regex]::Matches($argumentos.Groups[1].Value, '--keybind_\S+') | ForEach-Object { $_.Value }
     Anotar 'INFO' ('remapped: ' + $(if ($teclas) { $teclas -join ' ' } else { 'none (SDK defaults)' }))
-} else { Anotar 'FALLO' 'keyboard play is off in the arguments (TECLADO -> Jugar con teclado)' }
+} else { Anotar 'FALLO' 'keyboard play is off in the arguments (KEYBOARD -> Play with keyboard)' }
 # Steps 2 to 4: how BC textures are kept, half precision, ADPF and the thermal step-down.
 $etc2 = $arranque -split "`r?`n" | Where-Object { $_ -match '\[compatibilidad\] (BC\d|ETC2)|C5a: media precision|\[ritmo\]|\[termico\]' } | Select-Object -First 16
 foreach ($l in $etc2) { Anotar 'INFO' (($l -replace '^.*?(\[compatibilidad\]|\[nativo\]|\[ritmo\]|\[termico\])', '$1').Trim()) }

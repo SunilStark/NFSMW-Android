@@ -8,7 +8,7 @@ def editionId = providers.gradleProperty('nfsmw.edition').getOrElse('pal_es')
 if (!(editionId ==~ /[a-z][a-z0-9_]{0,31}/)) throw new GradleException('Invalid edition ID')
 def editionApp = editionId == 'pal_es' ? 'app' : "app_${editionId}"
 def editionLibrary = editionId == 'pal_es' ? 'main' : "main_${editionId}"
-def principal = [id: 'pal_es', name: 'PAL España',
+def principal = [id: 'pal_es', name: 'PAL Spain',
         sha256: 'aad15fc218d034de3131f746e0b763dd8049a40dd676efc87667fcaf4fc72694',
         language: 5, country: 31, library: 'main']
 if (editionId != 'pal_es') {

@@ -74,7 +74,7 @@ Three traps of CMake on Windows that cost a lot of time:
    named **NFS Most Wanted (dev)**, which installs beside the published app instead of replacing it. Both read the
    same game folder; each keeps its own saves and settings. Without the suffix the build replaces the published
    package, which has another signature: Android asks to uninstall that one first, which deletes its saves (export
-   them first from the launcher's **Partidas guardadas**).
+   them first from the launcher's **Saved games**).
 
    The APK is `android\app\build\outputs\apk\release\app-release.apk`: Release (`-O3`, ThinLTO), ARM64 only, signed
    with this PC's debug key. Keep that key (`%USERPROFILE%\.android\debug.keystore`): every later build must have the

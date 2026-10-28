@@ -85,7 +85,7 @@ public final class SaveArchiveTest {
                 out.closeEntry();
             }
             try { SaveArchive.restore(root, new ByteArrayInputStream(oversized.toByteArray()), backups); throw new AssertionError("Accepted oversized save"); }
-            catch (IOException expected) { check(expected.getMessage().contains("límite")); }
+            catch (IOException expected) { check(expected.getMessage().contains("limit")); }
             check(read(root,"saves/Driver/actual/data").equals("original"));
             // Simulate process death after moving the original, before installing the new directory.
             File work = folder.resolve(".nfsmw-save-transaction").toFile(); Files.createDirectory(work.toPath());

@@ -53,7 +53,7 @@ final class Diagnostics {
         if (GpuDrivers.selected(context) == null) return gpu();
         JSONObject unknown = new JSONObject();
         try { unknown.put("requestedDriver", GpuDrivers.selected(context).name)
-                .put("probeError", "Driver seleccionado pendiente de probar"); } catch (Exception ignored) { }
+                .put("probeError", "Selected driver not tested yet"); } catch (Exception ignored) { }
         return unknown;
     }
 
@@ -75,32 +75,32 @@ final class Diagnostics {
     static String incompatibility(Context context) {
         JSONObject result = gpu(context);
         if (result.optBoolean("compatible", true)) return null;
-        StringBuilder message = new StringBuilder("El controlador de ")
-                .append(result.optString("gpu", "esta GPU"))
-                .append(" no ofrece las funciones que necesita el renderizador nativo.");
-        message.append("\n\nVulkan del dispositivo: ").append(result.optString("vulkan", "no disponible"));
-        message.append("\n\nBajar la resolución no resuelve esta incompatibilidad. Puedes enviar el diagnóstico para ayudarnos a estudiar soporte.");
+        StringBuilder message = new StringBuilder("The driver of ")
+                .append(result.optString("gpu", "this GPU"))
+                .append(" does not offer the features the native renderer needs.");
+        message.append("\n\nDevice Vulkan: ").append(result.optString("vulkan", "not available"));
+        message.append("\n\nLowering the resolution does not fix this. You can send the diagnostics to help study support.");
         return message.toString();
     }
 
     static String summary(Context context) {
-        String version = "desconocida";
+        String version = "unknown";
         try { version = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName; }
         catch (Exception ignored) { }
         JSONObject device = gpu(context);
-        return "NFSMW Android Evolved " + version + "\nTeléfono: " + Build.MANUFACTURER + " " + Build.MODEL
+        return "NFSMW Android Evolved " + version + "\nDevice: " + Build.MANUFACTURER + " " + Build.MODEL
                 + "\nAndroid: " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")"
-                + "\nGPU: " + device.optString("gpu", "no disponible")
-                + "\nVulkan: " + device.optString("vulkan", "no disponible")
-                + "\nDriver seleccionado: " + (GpuDrivers.selected(context) == null ? "Sistema" : GpuDrivers.selected(context).name)
-                + "\nEdición del juego: " + editionLine(context) + "\n";
+                + "\nGPU: " + device.optString("gpu", "not available")
+                + "\nVulkan: " + device.optString("vulkan", "not available")
+                + "\nSelected driver: " + (GpuDrivers.selected(context) == null ? "System" : GpuDrivers.selected(context).name)
+                + "\nGame edition: " + editionLine(context) + "\n";
     }
 
     private static String editionLine(Context context) {
         GameEdition edition = GameEdition.of(context,
                 new File(android.os.Environment.getExternalStorageDirectory(), MainActivity.GAME_FOLDER_NAME));
-        if (edition == null) return "sin default.xex";
-        return edition.describe() + (edition.supported() ? "" : " (no compatible, SHA-256 " + edition.sha256.substring(0, 12) + ")");
+        if (edition == null) return "no default.xex";
+        return edition.describe() + (edition.supported() ? "" : " (not supported, SHA-256 " + edition.sha256.substring(0, 12) + ")");
     }
 
     static void recordLaunch(Context context) {
@@ -110,7 +110,7 @@ final class Diagnostics {
 
     static File createReport(Context context) throws Exception {
         File directory = new File(context.getCacheDir(), "reports");
-        if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException("No se pudo crear el informe.");
+        if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException("The report could not be created.");
         // Leave recent attachments available while a mail app or document picker
         // still reads them. Remove only reports older than seven days.
         File[] old = directory.listFiles();
@@ -118,20 +118,20 @@ final class Diagnostics {
             if (file.isFile() && file.lastModified() < System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)) file.delete();
         }
         String date = new SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(new Date());
-        File report = new File(directory, "NFSMW-diagnostico-" + date + ".zip");
+        File report = new File(directory, "NFSMW-diagnostics-" + date + ".zip");
         try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(report))) {
             ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
             ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
             if (manager != null) manager.getMemoryInfo(memory);
             StringBuilder info = new StringBuilder(summary(context));
-            info.append("Fecha: ").append(new Date()).append("\nABI: ").append(Arrays.toString(Build.SUPPORTED_ABIS))
-                    .append("\nRAM total: ").append(memory.totalMem).append("\nRAM disponible: ").append(memory.availMem)
-                    .append("\nÚltimo intento de iniciar: ").append(context.getSharedPreferences("nfsmw_diagnostics", 0)
-                            .getLong("last_launch_ms", 0)).append("\n\nOpciones:\n");
+            info.append("Date: ").append(new Date()).append("\nABI: ").append(Arrays.toString(Build.SUPPORTED_ABIS))
+                    .append("\nRAM total: ").append(memory.totalMem).append("\nAvailable RAM: ").append(memory.availMem)
+                    .append("\nLast start attempt: ").append(context.getSharedPreferences("nfsmw_diagnostics", 0)
+                            .getLong("last_launch_ms", 0)).append("\n\nOptions:\n");
             for (GameOptions.Option option : GameOptions.ALL) info.append(option.key).append('=').append(GameOptions.get(context, option.key)).append('\n');
-            info.append("\nArgumentos efectivos:\n");
+            info.append("\nEffective arguments:\n");
             for (String argument : GameOptions.arguments(context)) info.append(argument).append('\n');
-            info.append("\nDescribe qué ocurrió, cómo reproducirlo y la edición del juego.\n");
+            info.append("\nDescribe what happened, how to reproduce it and the game edition.\n");
             add(zip, "informe.txt", info.toString().getBytes(StandardCharsets.UTF_8));
             add(zip, "gpu.json", gpu(context).toString(2).getBytes(StandardCharsets.UTF_8));
             addFile(zip, "last-java-crash.txt", new File(context.getFilesDir(), "last-java-crash.txt"));
@@ -168,7 +168,7 @@ final class Diagnostics {
             output.write(bytes);
             if (size > head) {
                 int tail = (int) Math.min(size - head, LIMIT / 2);
-                if (size > LIMIT) output.write("\n[... registro recortado: inicio y final ...]\n".getBytes(StandardCharsets.UTF_8));
+                if (size > LIMIT) output.write("\n[... log trimmed: start and end ...]\n".getBytes(StandardCharsets.UTF_8));
                 input.seek(size - tail);
                 bytes = new byte[tail];
                 input.readFully(bytes);

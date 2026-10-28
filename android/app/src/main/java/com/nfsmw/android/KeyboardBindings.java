@@ -30,28 +30,28 @@ final class KeyboardBindings {
     }
 
     static final Bind[] ALL = {
-            new Bind("keybind_right_trigger", "Gatillo derecho (RT) · acelerar", "E,O"),
-            new Bind("keybind_left_trigger", "Gatillo izquierdo (LT) · frenar", "Q,I"),
-            new Bind("keybind_lstick_left", "Stick izquierdo ← · girar", "A"),
-            new Bind("keybind_lstick_right", "Stick izquierdo → · girar", "D"),
-            new Bind("keybind_lstick_up", "Stick izquierdo ↑", "W"),
-            new Bind("keybind_lstick_down", "Stick izquierdo ↓", "S"),
-            new Bind("keybind_lstick_press", "Pulsar stick izquierdo (L3)", "F"),
+            new Bind("keybind_right_trigger", "Right trigger (RT) · accelerate", "E,O"),
+            new Bind("keybind_left_trigger", "Left trigger (LT) · brake", "Q,I"),
+            new Bind("keybind_lstick_left", "Left stick ← · steer", "A"),
+            new Bind("keybind_lstick_right", "Left stick → · steer", "D"),
+            new Bind("keybind_lstick_up", "Left stick ↑", "W"),
+            new Bind("keybind_lstick_down", "Left stick ↓", "S"),
+            new Bind("keybind_lstick_press", "Left stick click (L3)", "F"),
             new Bind("keybind_a", "A", "Semicolon,Space"),
             new Bind("keybind_b", "B", "Quote,Backspace"),
             new Bind("keybind_x", "X", "L"),
             new Bind("keybind_y", "Y", "P"),
             new Bind("keybind_left_shoulder", "LB", "1"),
             new Bind("keybind_right_shoulder", "RB", "3"),
-            new Bind("keybind_rstick_up", "Stick derecho ↑", "Up"),
-            new Bind("keybind_rstick_down", "Stick derecho ↓", "Down"),
-            new Bind("keybind_rstick_left", "Stick derecho ←", "Left"),
-            new Bind("keybind_rstick_right", "Stick derecho →", "Right"),
-            new Bind("keybind_rstick_press", "Pulsar stick derecho (R3)", "K"),
-            new Bind("keybind_dpad_up", "Cruceta ↑", "Shift+Up"),
-            new Bind("keybind_dpad_down", "Cruceta ↓", "Shift+Down"),
-            new Bind("keybind_dpad_left", "Cruceta ←", "Shift+Left"),
-            new Bind("keybind_dpad_right", "Cruceta →", "Shift+Right"),
+            new Bind("keybind_rstick_up", "Right stick ↑", "Up"),
+            new Bind("keybind_rstick_down", "Right stick ↓", "Down"),
+            new Bind("keybind_rstick_left", "Right stick ←", "Left"),
+            new Bind("keybind_rstick_right", "Right stick →", "Right"),
+            new Bind("keybind_rstick_press", "Right stick click (R3)", "K"),
+            new Bind("keybind_dpad_up", "D-pad ↑", "Shift+Up"),
+            new Bind("keybind_dpad_down", "D-pad ↓", "Shift+Down"),
+            new Bind("keybind_dpad_left", "D-pad ←", "Shift+Left"),
+            new Bind("keybind_dpad_right", "D-pad →", "Shift+Right"),
             new Bind("keybind_start", "START", "X,Return"),
             new Bind("keybind_back", "BACK", "Z,Tab"),
     };
@@ -78,9 +78,9 @@ final class KeyboardBindings {
         return prefs(context).getString(bind.cvar, bind.defaultKeys);
     }
 
-    /** The keys as the launcher shows them: "Space, Shift+Up", or "(ninguna)". */
+    /** The keys as the launcher shows them: "Space, Shift+Up", or "(none)". */
     static String describe(String keys) {
-        return keys.isEmpty() ? "(ninguna)" : keys.replace(",", ", ");
+        return keys.isEmpty() ? "(none)" : keys.replace(",", ", ");
     }
 
     static void reset(Context context) {

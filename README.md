@@ -28,7 +28,7 @@ pass tuning.
 
 - Android 8 or later, ARM64.
 - A GPU with Vulkan 1.1 or later **and** the descriptor-indexing features (Vulkan 1.2, or `VK_EXT_descriptor_indexing`).
-  Without them, use the launcher's **API gráfica → OpenGL ES**.
+  Without them, use the launcher's **Graphics API → OpenGL ES**.
 - Your own **Need for Speed: Most Wanted for Xbox 360, PAL Spain edition**, extracted: `default.xex`, `NFS/` and
   `Movies/`. Other editions need their own build ([docs/ANDROID_EDITIONS.md](docs/ANDROID_EDITIONS.md)).
 
@@ -52,8 +52,8 @@ Wanted (dev)**: it installs beside the published app and reads the same game fol
 
 1. Allow **All files access** when the launcher asks.
 2. Copy `default.xex`, `NFS/` and `Movies/` into `Internal storage/nsfmw-androidevolved/`, or pick the extracted folder
-   with **Elegir carpeta del juego**.
-3. Tap **Jugar**. The first run builds the shader library (`nfsmw_shaders.nfsp`) from your disc, on the tablet.
+   with **Choose game folder**.
+3. Tap **Play**. The first run builds the shader library (`nfsmw_shaders.nfsp`) from your disc, on the tablet.
 
 Starting settings and how to measure frame rate, temperature and battery are in [CLAUDE.md](CLAUDE.md). The launcher's
 update offers point at upstream's releases; ignore them on a `.dev` build.
@@ -61,13 +61,13 @@ update offers point at upstream's releases; ignore them on a `.dev` build.
 ### Controls
 
 - **Bluetooth or USB controller**: player 1; the touch controls hide.
-- **Keyboard**: **TECLADO → Jugar con teclado** makes it player 1's controller (A/D steer, E accelerates, Q brakes by
-  default). **Teclas** remaps each button; a key given to one button leaves the others.
+- **Keyboard**: **KEYBOARD → Play with keyboard** makes it player 1's controller (A/D steer, E accelerates, Q brakes
+  by default). **Keys** remaps each button; a key given to one button leaves the others.
 - **Touch**: analog or tilt steering and every button, movable and resizable in the editor (gear button).
 
 ### Logs
 
-`adb logcat -s NFSMW-rex NFSMW`, or `tools/android_logcat.sh`. **Enviar crash o log** in the launcher makes a ZIP with
+`adb logcat -s NFSMW-rex NFSMW`, or `tools/android_logcat.sh`. **Send crash or log** in the launcher makes a ZIP with
 the native logs and the device report.
 
 ## Layout

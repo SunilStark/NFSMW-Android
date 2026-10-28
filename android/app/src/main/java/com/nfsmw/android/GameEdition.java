@@ -15,7 +15,7 @@ import java.security.MessageDigest;
 /** XEX identity and the native module actually included in this APK. */
 final class GameEdition {
     static final String SUPPORTED_SHA256 = "aad15fc218d034de3131f746e0b763dd8049a40dd676efc87667fcaf4fc72694";
-    static final String SUPPORTED_NAME = "PAL (España)";
+    static final String SUPPORTED_NAME = "PAL (Spain)";
     private static final String PREFS = "nfsmw_edition";
 
     private static final java.util.List<CompiledEditions.Entry> COMPILED =
@@ -36,7 +36,7 @@ final class GameEdition {
 
     String describe() {
         if (supported()) return compiled.name;
-        return name != null ? name : "desconocida";
+        return name != null ? name : "unknown";
     }
 
     /** The edition of the game folder's default.xex, or null if it cannot be read. Cached by size and date. */

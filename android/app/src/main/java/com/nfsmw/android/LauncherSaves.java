@@ -30,7 +30,7 @@ final class LauncherSaves {
     boolean blocked() { return busy || failedRecovery; }
     private void message(String text) {
         if (activity.isFinishing() || activity.isDestroyed()) return;
-        new AlertDialog.Builder(activity).setTitle("Partidas guardadas").setMessage(text).setPositiveButton("Aceptar", null).show();
+        new AlertDialog.Builder(activity).setTitle("Saved games").setMessage(text).setPositiveButton("OK", null).show();
     }
     void recover() {
         if (GameActivity.gameRunning) return;
@@ -38,7 +38,7 @@ final class LauncherSaves {
         worker.execute(() -> {
             String error = null;
             try { SaveArchive.recover(root); }
-            catch (IOException failure) { error = "No se pudo recuperar una importación interrumpida. Conserva los datos de la app y los respaldos. " + failure.getMessage(); }
+            catch (IOException failure) { error = "An interrupted import could not be recovered. Keep the app's data and the backups. " + failure.getMessage(); }
             String report = error;
             main.post(() -> { busy = false; failedRecovery = report != null; setBusy.accept(failedRecovery); if (report != null) message(report); });
         });
@@ -48,31 +48,31 @@ final class LauncherSaves {
         return files == null ? null : Arrays.stream(files).max(Comparator.comparingLong(File::lastModified)).orElse(null);
     }
     void menu() {
-        if (blocked()) { message("Espera a que termine la recuperación de las partidas."); return; }
-        if (GameActivity.gameRunning) { message("Sal del juego antes de importar o exportar partidas."); return; }
+        if (blocked()) { message("Wait for the saved-game recovery to finish."); return; }
+        if (GameActivity.gameRunning) { message("Quit the game before importing or exporting saved games."); return; }
         File last = latest();
-        String info = last == null ? "Todavía no hay respaldos locales." : "Último respaldo: " + DateFormat.getDateTimeInstance().format(new Date(last.lastModified()));
-        new AlertDialog.Builder(activity).setTitle("Partidas guardadas")
-            .setItems(new String[]{"Exportar ZIP", "Crear respaldo local", "Importar ZIP", "Restaurar último respaldo"}, (dialog, which) -> {
+        String info = last == null ? "There are no local backups yet." : "Last backup: " + DateFormat.getDateTimeInstance().format(new Date(last.lastModified()));
+        new AlertDialog.Builder(activity).setTitle("Saved games")
+            .setItems(new String[]{"Export ZIP", "Create local backup", "Import ZIP", "Restore last backup"}, (dialog, which) -> {
                 if (which == 0) picker(EXPORT);
-                else if (which == 1) run(() -> "Respaldo creado y verificado: " + SaveArchive.backup(root, backups).getName() + ". Puedes exportar un ZIP para conservarlo fuera de la app.");
+                else if (which == 1) run(() -> "Backup created and verified: " + SaveArchive.backup(root, backups).getName() + ". You can export a ZIP to keep it outside the app.");
                 else if (which == 2) picker(IMPORT);
                 else if (last == null) message(info);
-                else confirm(() -> run(() -> { SaveArchive.restore(root, new FileInputStream(last), backups); return "Respaldo restaurado. La copia anterior también quedó respaldada."; }));
-            }).setNeutralButton("Información", (dialog, which) -> message(info + "\nLos respaldos locales se pierden al desinstalar; exporta un ZIP para conservarlos. Las copias se verifican con SHA-256. Solo se importan ZIPs creados por esta función."))
-            .setNegativeButton("Cerrar", null).show();
+                else confirm(() -> run(() -> { SaveArchive.restore(root, new FileInputStream(last), backups); return "Backup restored. The previous copy was backed up too."; }));
+            }).setNeutralButton("Information", (dialog, which) -> message(info + "\nLocal backups are lost when the app is uninstalled; export a ZIP to keep them. Copies are verified with SHA-256. Only ZIPs created by this feature can be imported."))
+            .setNegativeButton("Close", null).show();
     }
     private void picker(int request) {
         Intent intent = new Intent(request == EXPORT ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT)
                 .addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip");
         if (request == EXPORT) intent.putExtra(Intent.EXTRA_TITLE, "NFSMW-partidas-" + System.currentTimeMillis() + ".zip");
         try { activity.startActivityForResult(intent, request); }
-        catch (Exception error) { message("No se pudo abrir el selector de documentos."); }
+        catch (Exception error) { message("The document picker could not be opened."); }
     }
     private void confirm(Runnable action) {
-        new AlertDialog.Builder(activity).setTitle("Importar partidas")
-            .setMessage("Se sustituirán los perfiles, partidas y logros. Primero se verificará el ZIP y se respaldarán los actuales. Los ajustes y shaders se conservan.")
-            .setPositiveButton("Importar con respaldo", (dialog, which) -> action.run()).setNegativeButton("Cancelar", null).show();
+        new AlertDialog.Builder(activity).setTitle("Import saved games")
+            .setMessage("Profiles, saved games and achievements will be replaced. The ZIP is verified first and the current ones are backed up. Settings and shaders are kept.")
+            .setPositiveButton("Import with backup", (dialog, which) -> action.run()).setNegativeButton("Cancel", null).show();
     }
     boolean result(int request, int result, Intent data) {
         if (request != EXPORT && request != IMPORT) return false;
@@ -80,29 +80,29 @@ final class LauncherSaves {
         Uri uri = data.getData();
         if (request == EXPORT) run(() -> {
             OutputStream out = activity.getContentResolver().openOutputStream(uri, "w");
-            if (out == null) throw new IOException("No se puede escribir el documento.");
+            if (out == null) throw new IOException("The document cannot be written.");
             int count = SaveArchive.export(root, out);
-            return "ZIP exportado: " + count + " archivos de partidas. Ajustes, shaders, cachés y drivers quedan fuera.";
+            return "ZIP exported: " + count + " saved-game files. Settings, shaders, caches and drivers are left out.";
         });
         else confirm(() -> run(() -> {
             InputStream in = activity.getContentResolver().openInputStream(uri);
-            if (in == null) throw new IOException("No se puede leer el documento.");
+            if (in == null) throw new IOException("The document cannot be read.");
             File backup = SaveArchive.restore(root, in, backups);
-            return "Partidas importadas y verificadas. Respaldo previo: " + backup.getName();
+            return "Saved games imported and verified. Previous backup: " + backup.getName();
         }));
         return true;
     }
     interface Job { String run() throws IOException; }
     private void run(Job job) {
-        if (blocked() || GameActivity.gameRunning) { message("Sal del juego y espera a que termine la operación actual."); return; }
+        if (blocked() || GameActivity.gameRunning) { message("Quit the game and wait for the current operation to finish."); return; }
         busy = true; setBusy.accept(true);
         worker.execute(() -> {
             String result;
             try { SaveArchive.recover(root); result = job.run(); }
-            catch (IOException error) { result = "No se completó la operación: " + error.getMessage(); }
+            catch (IOException error) { result = "The operation did not complete: " + error.getMessage(); }
             boolean recoveryFailed = false;
             try { SaveArchive.recover(root); }
-            catch (IOException error) { recoveryFailed = true; result += " Conserva los datos de la app: hay una recuperación pendiente."; }
+            catch (IOException error) { recoveryFailed = true; result += " Keep the app's data: a recovery is pending."; }
             String report = result;
             boolean blocked = recoveryFailed;
             main.post(() -> { busy = false; failedRecovery = blocked; setBusy.accept(blocked); message(report); });

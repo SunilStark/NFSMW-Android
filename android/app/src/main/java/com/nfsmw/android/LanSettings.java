@@ -134,12 +134,12 @@ final class LanSettings {
         switch (mode(context)) {
             case MODE_HOST:
                 String ip = ServidorEa.ipLocal();
-                return "Anfitrión en este móvil" + (ip != null ? " · " + ip : " · sin red local");
+                return "Host on this device" + (ip != null ? " · " + ip : " · no local network");
             case MODE_JOIN:
                 String s = server(context);
-                return s.isEmpty() ? "Unirse · falta el servidor" : "Unirse a " + s;
+                return s.isEmpty() ? "Join · no server set" : "Join " + s;
             default:
-                return "Desactivado";
+                return "Off";
         }
     }
 }

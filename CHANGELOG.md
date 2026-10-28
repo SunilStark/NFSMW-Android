@@ -5,22 +5,25 @@ Changes in this copy, newest first. Upstream's own history is in
 
 ## Unreleased
 
-- **16:10.** Internal resolutions 1056x660 (exactly half of the tablet's 2112x1320) and 1280x800, and **Proporción
-  de imagen → La de la pantalla** for any screen: the game draws at the screen's proportion with no bars and no
-  stretched 3D. Narrower than 16:9 it shows more above and below (the game's own projection); wider, more at the
-  sides (as before). The HUD is still stretched (prototype). Not yet run on the tablet.
+- **English.** The launcher (options, dialogs, saved-game manager, touch-control editor and hints, diagnostics,
+  shader builder messages) is in English, and the game's text and menus default to English (the PAL disc carries
+  it); speech and movies stay in the disc's language. Edition names in English.
+- **16:10.** Internal resolutions 1056x660 (exactly half of the tablet's 2112x1320) and 1280x800, and **Aspect ratio →
+  The screen's** for any screen: the game draws at the screen's proportion with no bars and no stretched 3D. Narrower
+  than 16:9 it shows more above and below (the game's own projection); wider, more at the sides (as before). The HUD is
+  still stretched (prototype). Not yet run on the tablet.
 - **ADPF and thermal step-down** (Android 13+ and 12+). The game's three hot threads report each frame's work to
   Android against the frame budget, so it can set the clocks for it. Before the tablet throttles, the shadows step
-  down (one map, then no cast shadows) and come back once it has cooled. Launcher: **Control térmico**, **Ayuda al
-  sistema (ADPF)**, **Núcleos del juego**. Not yet run on the tablet.
+  down (one map, then no cast shadows) and come back once it has cooled. Launcher: **Thermal control**, **System
+  performance hints (ADPF)**, **Game cores**. Not yet run on the tablet.
 - **Half precision fixed for shadows and highlights.** The 16-bit color math (`nfsmw_nativo_media_precision`, off by
   default) also relaxed the shadow map, which holds depth: shadow acne. Its samples, and pow/exp/log with what feeds
-  them, now stay at 32 bits. Launcher: **Precisión del color**. Tested on compiled shaders off-device; not yet on
+  them, now stay at 32 bits. Launcher: **Color precision**. Tested on compiled shaders off-device; not yet on
   the tablet.
 - **ETC2 textures on GPUs without BC** (Mali, PowerVR; Vulkan). The game's BC1-5 textures stay compressed as ETC2
   RGB8A1, ETC2 RGBA8 and EAC R11/RG11, the size of BC, instead of being decoded to 4 bytes a texel (2 for BC1). They
   are transcoded in the background on the cores the game does not use and kept in a disk cache: the first time a
-  texture is seen it is still decoded, then it comes from the cache. Launcher: **Texturas en GPUs sin BC**. Checked
+  texture is seen it is still decoded, then it comes from the cache. Launcher: **Textures on GPUs without BC**. Checked
   off-device: every block decodes to the encoder's error, Mesa's ETC2 decoder agrees on every texel, 38-50 dB PSNR
   against the BC texels on synthetic textures (30-33 on pure noise). Not yet run on the tablet.
 - **Repository cleanup.** New README and changelog for this copy; one English build guide
@@ -30,7 +33,7 @@ Changes in this copy, newest first. Upstream's own history is in
 - **Local builds.** `build_android.ps1` and `build_android.sh` pass their arguments to Gradle;
   `-Pnfsmw.applicationIdSuffix=.dev` builds `com.nfsmw.android.dev` beside the published app. The GitHub workflow is
   manual only, since it cannot build without the generated code. [CLAUDE.md](CLAUDE.md) is the runbook.
-- **Keyboard.** The launcher's TECLADO section turns on the SDK's keyboard driver and remaps its 24 buttons; the
+- **Keyboard.** The launcher's KEYBOARD section turns on the SDK's keyboard driver and remaps its 24 buttons; the
   touch controls hide while the keyboard plays. The game screen is no longer recreated when a controller or keyboard
   connects. Not yet tested on the tablet.
 - **Fast cores.** The game's threads are kept off the Cortex-A55s on the Exynos 1380, whose clock is close to the
