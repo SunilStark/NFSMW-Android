@@ -120,6 +120,7 @@ public final class GameActivity extends SDLActivity
             return;
         }
         useWholeScreen();
+        fixSurfaceSize();
 
         ViewGroup root = findViewById(android.R.id.content);
         controls = new TouchControlsView(this);
@@ -189,6 +190,45 @@ public final class GameActivity extends SDLActivity
         }
         getWindow().setAttributes(attrs);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    /*
+     * Screen scaling: the display hardware, not the GPU.
+     *
+     * The swapchain took the panel's size (2112x1320 on the tablet), so every frame the GPU drew the game's
+     * 1280x720 image again at 2.8 Mpixels and wrote ~11 MB, in the GPU time between two frames' work (the C2
+     * report's "hueco entre trabajos", ~4 ms in a race). With a fixed buffer size the surface stays at the internal
+     * resolution's width and the screen's proportion (1280x800), and SurfaceFlinger's display hardware scales it to
+     * the panel while it composites, which it does anyway. Same picture: the game only ever drew 1280x720. SDL
+     * reports the buffer size to the game and the device size apart, and the proportion does not change.
+     */
+    private void fixSurfaceSize() {
+        if (mSurface == null || !"display".equals(GameOptions.get(this, GameOptions.SCREEN_SCALING))) {
+            return;
+        }
+        String[] size = GameOptions.get(this, GameOptions.RESOLUTION).split("x");
+        int width;
+        try {
+            width = Integer.parseInt(size[0]);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getRealMetrics(metrics);
+        int longSide = Math.max(metrics.widthPixels, metrics.heightPixels);
+        int shortSide = Math.min(metrics.widthPixels, metrics.heightPixels);
+        if (width >= longSide || shortSide == 0) {
+            return;  // nothing to save: the panel is not larger
+        }
+        int height = Math.round(width * (float) shortSide / longSide) & ~1;
+        // SDL adds its surface with WRAP_CONTENT, and a SurfaceView with a fixed buffer size measures itself to that
+        // size: on the tablet the 1280x800 image sat unscaled in the top-left corner. Filling the parent makes the
+        // view the whole screen, and the buffer is scaled to it.
+        mSurface.setLayoutParams(new android.widget.RelativeLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        mSurface.getHolder().setFixedSize(width, height);
+        Log.i(TAG, "superficie del juego a " + width + "x" + height + "; la pantalla la escala a " + longSide + "x"
+                + shortSide);
     }
 
     @Override

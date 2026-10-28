@@ -5,9 +5,20 @@ Changes in this copy, newest first. Upstream's own history is in
 
 ## Unreleased
 
+- **Faster on Mali (step 9).** Clears are done by the next pass with `loadOp = CLEAR` instead of writing the whole
+  image to memory and loading it back (race clears 1.2-3.3 → 0.16 ms of GPU per frame). **Screen scaling → Display
+  hardware** (built, not yet measured): the game's surface stays at the internal resolution's width and the display
+  hardware scales it to the panel, instead of the GPU drawing every frame again at 2112x1320.
+- **Car reflections → Off** (the new default): no reflection drawn per frame, the rear-view mirror's face included
+  (6.2 ms in a race on the tablet); one face is redrawn every 30 frames so the car's reflection still follows the
+  surroundings. The road reflection is skipped again when nothing reads it (its address was wrong at 1280x720).
+- **45 FPS** and **steadier pacing**: the game's frame clock follows the panel's real refresh when the panel's rate
+  is a whole multiple of the limit (45 on 90 Hz, 60 on 60 Hz).
+- **Movies play** with English text (the game asked for English movie files the Spanish disc does not have).
+- **Touch pad HIDE button**, and **Back twice** asks to leave the game and returns to the launcher.
 - **First build of this copy** (2026-10-28), on a Windows PC with 7.8 GB of RAM: rexglue, the code generator (265
-  files, 139 MB of C++), and the `.dev` APK (31 MB, `libmain.so` 40 MB) in 47 minutes; installed on the tablet. Not
-  yet launched there. Fixes on the way: the host build on Windows (Visual Studio Build Tools, `-march=x86-64-v2`,
+  files, 139 MB of C++), and the `.dev` APK (31 MB, `libmain.so` 40 MB) in 47 minutes; it runs on the tablet. Fixes
+  on the way: the host build on Windows (Visual Studio Build Tools, `-march=x86-64-v2`,
   `socklen_t`), the ETC2 cache test on Windows, and `-Pnfsmw.nativeJobs` / `-Pnfsmw.ltoJobs` to cap the build's
   parallelism on a PC with little RAM. Crash reports go to this copy's owner.
 - **English.** The launcher (options, dialogs, saved-game manager, touch-control editor and hints, diagnostics,

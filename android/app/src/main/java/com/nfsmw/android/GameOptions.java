@@ -48,6 +48,10 @@ final class GameOptions {
     static final String RENDERER = "renderer";
     static final String API = "graphics_api";
     static final String ASPECT = "aspect";
+    /** Launcher only (no cvar): who scales the image to the panel (GameActivity.fixSurfaceSize). */
+    static final String SCREEN_SCALING = "screen_scaling";
+    /** Launcher only (no cvar): the output's gamma, through the custom image filter (arguments()). */
+    static final String BRIGHTNESS = "brightness";
     /** The ASPECT value that GameActivity turns into the screen's own proportion. */
     static final String SCREEN_ASPECT = "pantalla";
 
@@ -99,6 +103,12 @@ final class GameOptions {
             new Option(ASPECT, "Aspect ratio", "nfsmw_proporcion_pantalla", "0",
                     new String[] {"0", SCREEN_ASPECT},
                     new String[] {"16:9 · as on the Xbox 360", "The screen's · no bars, no distortion (prototype)"}),
+            // The game's surface at the internal resolution's width and the screen's proportion (1280x800 on a 16:10
+            // tablet with 1280x720) and the display hardware scales it to the panel while it composites, for free;
+            // otherwise the GPU draws every frame again at the panel's size (2112x1320: 2.8 Mpixels). No cvar.
+            new Option(SCREEN_SCALING, "Screen scaling", "", "display",
+                    new String[] {"display", "gpu"},
+                    new String[] {"Display hardware · faster", "GPU · as before"}),
             new Option(FPS, "FPS limit", "nfsmw_limite_fps", "60",
                     new String[] {"30", "45", "60", "90", "120"},
                     new String[] {"30 FPS · saves battery", "45 FPS · even on 90 Hz screens, when 60 does not hold",
@@ -106,9 +116,12 @@ final class GameOptions {
             new Option("aa", "Antialiasing", "nfsmw_antialiasing", "apagado",
                     new String[] {"apagado", "fxaa"},
                     new String[] {"Off", "FXAA"}),
+            // "off" is not a value of nfsmw_sombras_cada: arguments() turns it into nfsmw_nativo_omitir_sombras, which
+            // records no shadow map draws (3.5-4.4 ms of GPU per race frame on the tablet).
             new Option("shadows", "Shadows", "nfsmw_sombras_cada", "1",
-                    new String[] {"1", "2"},
-                    new String[] {"Every frame", "Every 2 frames · more performance"}),
+                    new String[] {"1", "2", "off"},
+                    new String[] {"Every frame", "Every 2 frames · more performance",
+                            "Off · no cast shadows, most performance"}),
             // Faces of the car's environment map redrawn per race frame (nfsmw_recortes_carrera.cpp). 0 redraws one
             // face every 30 frames in turn (nfsmw_cubemap_refresco_lento): almost no cost, and the paint's
             // reflection follows the car slowly (tunnels, night) instead of keeping the race start's; the rear-view
@@ -121,6 +134,22 @@ final class GameOptions {
             new Option("road_reflection", "Wet road reflection", "nfsmw_reflejo_carretera", "true",
                     new String[] {"true", "false"},
                     new String[] {"On", "Off · more performance"}),
+            // How the shadow map is sampled (nfsmw_nativo_pcf_barato): one texel gives blocky, stair-stepped shadow
+            // edges (seen on the car's paint on the tablet); the 3x3 filter smooths them. Up to ~2 ms of GPU.
+            new Option("shadow_edges", "Shadow edges", "nfsmw_nativo_pcf_barato", "true",
+                    new String[] {"true", "false"},
+                    new String[] {"Sharp · blocky edges, fastest", "Smooth · filtered edges, a little slower"}),
+            // The game's own "visual treatment": its yellow tint, desaturation and vignette (nfsmw_tratamiento_visual).
+            // Off brightens the city a lot; no cost either way.
+            new Option("color_filter", "Game color filter", "nfsmw_tratamiento_visual", "original",
+                    new String[] {"original", "suave", "apagado"},
+                    new String[] {"Original · yellow tint and vignette, as on the Xbox 360", "Soft · half strength",
+                            "Off · brighter, natural colors"}),
+            // Launcher only: lifts the mid-tones with the output's gamma ramp (nfsmw_posproceso = personalizado), at no
+            // cost. Only with Image filter → No filter: the presets have their own grading.
+            new Option(BRIGHTNESS, "Brightness", "", "1.00",
+                    new String[] {"1.00", "1.10", "1.20", "1.30"},
+                    new String[] {"Normal", "Brighter", "Much brighter", "Brightest"}),
             new Option("sky", "Sky glow", "nfsmw_resplandor_cielo", "natural",
                     new String[] {"original", "natural", "suave"},
                     new String[] {"Original (Xbox 360)", "Natural", "Soft"}),
@@ -187,9 +216,28 @@ final class GameOptions {
             if (o.key.equals(API) && !"nativo".equals(get(context, RENDERER))) {
                 continue;  // the Xenos renderer is Vulkan only
             }
+            if (o.cvar.isEmpty()) {
+                continue;  // launcher only
+            }
             String value = get(context, o.key);
             if (o.key.equals(ASPECT) && SCREEN_ASPECT.equals(value)) {
                 value = screenAspect(context);
+            }
+            if (o.key.equals("shadows") && "off".equals(value)) {
+                args.add("--nfsmw_sombras_cada=1");
+                args.add("--nfsmw_nativo_omitir_sombras=true");
+                continue;
+            }
+            // Brightness above Normal with no image filter: the custom filter with only its gamma (the rest of its
+            // values default to no change), and a small lift at the brightest.
+            if (o.key.equals("filter") && "apagado".equals(value) && !"1.00".equals(get(context, BRIGHTNESS))) {
+                String gamma = get(context, BRIGHTNESS);
+                args.add("--nfsmw_posproceso=personalizado");
+                args.add("--nfsmw_posproceso_gamma=" + gamma);
+                if ("1.30".equals(gamma)) {
+                    args.add("--nfsmw_posproceso_brillo=+0.05");
+                }
+                continue;
             }
             args.add("--" + o.cvar + "=" + value);
             // Off means no face redrawn: also the rear-view mirror's, which nfsmw.toml keeps every frame

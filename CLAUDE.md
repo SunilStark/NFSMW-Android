@@ -14,11 +14,21 @@ upstream's release notes into `CHANGELOG.md` under an "Upstream" line.
 
 ## Status at handover (2026-10-28, first local session)
 
-**Built, installed, not yet launched.** The first local session (on the owner's Windows PC) built rexglue, ran the
-code generator and built the `.dev` APK from this copy with no compile errors in the never-compiled code below; it is
-installed on the tablet as `com.nfsmw.android.dev`, and the game folder (from the owner's ISO) is in
-`/sdcard/nsfmw-androidevolved/`. **It has not been started on the tablet yet**: the next step is the smoke test with
-the owner (launch, All files access, shader library build, a race), then "Next" step 1.
+**Runs on the tablet; the work is now GPU performance (step 9).** The first local session (the owner's Windows PC)
+built everything from this copy, installed `com.nfsmw.android.dev` (no published app on the tablet; the game folder,
+from the owner's ISO, is in `/sdcard/nsfmw-androidevolved/`) and played it with the owner. Confirmed on the tablet:
+the fast cores (`juego en los nucleos 4,5,6,7`), Vulkan on the Mali-G68 with ETC2 (61 dB on the first textures),
+the ADPF session (reports 25-35 us, 0 rejected) and the thermal reader, movies with sound, HIDE, Back twice.
+
+The owner asked to change the order: steps 6 and 9 came before 2-5 and step 1's script. **Not done yet: "Next"
+step 1's `comprobar_tableta.ps1`, and the measured comparisons of steps 2-5.** Measured so far, race GPU time per
+frame from the renderer's own C2 report (`[nativo] C2: GPU por Swap`): 46.5 ms in the first race; 26.7-29.8 ms after
+the reflection fixes and 9a (not the same route, so no clean before/after for the total). Breakdown and the plan for
+what is left are under "Next", step 9. The tablet reaches thermal level 1 within a few minutes of play.
+
+Measuring on this PC: record the whole log while the owner plays
+(`adb logcat -v time -s NFSMW-rex:V NFSMW:V > out/tablet/<name>.log`, from Git Bash in the background; a PowerShell
+background job was cut off after a minute), then read the C2/C6 reports from it.
 
 On this PC, the asset-free tests pass: the three Java tests in `docs/building-android.md`, and `android_nucleos`,
 `texturas_etc`, `tamano_pantalla`, `android_termico`, `spirv_precision`, `texturas_cache_etc` (after a Windows fix).
@@ -234,7 +244,35 @@ battery use **Unrestricted**, Game Booster on.
   unchanged, so saved settings carry over (a saved language choice too: set it to English once on an existing
   install). Java tests pass; not built.
 
+- First local session (2026-10-28), each commit says what ran on the tablet:
+  - `tools: build the code generator on Windows with clang`, `android: close a damaged ETC2 cache file before
+    deleting it`, `android: first build of this copy; cap the native build's parallelism` (`-Pnfsmw.nativeJobs`,
+    `-Pnfsmw.ltoJobs`), `android: crash reports go to this copy's owner`.
+  - `android: movies in the disc's language when the text is English`: with English text no movie played (the game
+    asked for `*_ENGLISH_pal.wmv`); a hook on the movie path builder `sub_82282E98` asks for the edition's
+    language. Confirmed by the owner (speech and music).
+  - `android: HIDE button on the touch pad`, `android: Back twice asks to leave the game and returns to the
+    launcher` (`RestartActivity` in its own process). Both confirmed by the owner.
+  - `android: the panel's vsync as the game's vblank, and 45 FPS (step 6)`: `android_vsync.cpp`. Pacing confirmed in
+    the log; the 45 limit itself not played yet.
+  - `android: reflections nothing reads, and a still reflection that follows the car`: Car reflections → Off (the
+    default) also unpins the mirror face (6.2 ms); one face redrawn every 30 frames; the road reflection's EDRAM
+    address is learned (0x07647000 at 1280x720 on the tablet, not 0x07C5A000).
+  - `android: clears done by the next pass with loadOp = CLEAR (step 9a)`: clears 1.2-3.3 → 0.16 ms per frame, no
+    DIFERENCIA, nothing wrong on screen.
+  - Built, not yet run on the tablet: the slow reflection refresh, the reflection guard looking again, and
+    **Screen scaling → Display hardware** (9c, below).
+
 ## Next, in order (each measured on the tablet before and after)
+
+The owner reordered: 6 and 9 are under way, 1-5 still to measure. Step 9 status (race GPU ms per frame after 9a:
+scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-3.5, post 2.9-3.4, road reflection
+2.8-3.0, small targets 1.9-2.0; 27-30 total, so ~11-13 ms to cut for 60 FPS):
+- 9a done (clears in passes). 9c in progress: the GPU is never starved (each job takes ~61 ms of wall time, two
+  frames queued; the ring waits 0.04 ms per Swap), so the "gap" is GPU work between jobs, mostly the presenter
+  drawing the image again at 2112x1320. Screen scaling → Display hardware puts the surface at 1280x800 and lets the
+  display hardware scale; measure the gap with it on and off. Then: the ~4 pass resumes per frame after copies
+  (each reloads color and depth), and 9b (store depth only when read).
 
 1. **Confirm the two changes above on the tablet**: the core log line, keyboard play and remapping, controller and
    keyboard connected mid-race. Build and install the `.dev` APK, then run
