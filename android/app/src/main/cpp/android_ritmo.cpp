@@ -6,7 +6,9 @@
 // then a frame does not fit. The session holds the game's hot threads: the preparer and the executor (Main XThread),
 // which join it from the frame handoff (nfsmw_espera_fotograma.cpp), and the ring thread, which reports each frame
 // from its Swap (nfsmw_nativo_sistema.cpp). A frame's work is the CPU time of the busiest of them
-// (android_termico.h), against 1/limit of nfsmw_limite_fps.
+// (android_termico.h), against 1/limit of nfsmw_limite_fps. On Android 15+ the report also carries the frame's GPU
+// time (the renderer's timestamps), so the system can set the GPU clock for the frame too: without it, the Mali's
+// governor held the GPU at 351-552 MHz of 949 in a race at 85 % load, whatever the frame needed.
 //
 // Thermals (API 31+): a thread reads the thermal headroom forecast for 10 s ahead every 2 s and, before the tablet
 // throttles, sets a floor under the 30 FPS guard's shadow steps (one shadow map, then no cast shadows); when it has
@@ -39,6 +41,10 @@ REXCVAR_DEFINE_BOOL(nfsmw_android_adpf, true, "NFSMW",
                     "Android 13+: el juego dice al sistema cuanto trabajo lleva cada fotograma frente a su presupuesto "
                     "(ADPF), y el sistema sube los relojes antes de que un fotograma no quepa")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_BOOL(nfsmw_android_adpf_gpu, true, "NFSMW",
+                    "Android 15+: el informe de cada fotograma lleva tambien su tiempo de GPU, para que el sistema "
+                    "ajuste el reloj de la GPU al presupuesto")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 REXCVAR_DEFINE_BOOL(nfsmw_android_termico, true, "NFSMW",
                     "Android 12+: antes de que el sistema baje los relojes por calor, recortar las sombras (un mapa, "
                     "luego sin sombras proyectadas) y devolverlas al enfriarse")
@@ -67,6 +73,7 @@ namespace {
 struct APerformanceHintManager;
 struct APerformanceHintSession;
 struct AThermalManager;
+struct AWorkDuration;
 
 // libandroid.so's functions, or null where this Android does not have them.
 struct Funciones {
@@ -79,6 +86,13 @@ struct Funciones {
   AThermalManager* (*termico)() = nullptr;
   int (*estado)(AThermalManager*) = nullptr;
   float (*margen)(AThermalManager*, int) = nullptr;  // API 31
+  // API 35: a report with the CPU and GPU parts of the frame.
+  AWorkDuration* (*duracion_crear)() = nullptr;
+  void (*duracion_inicio)(AWorkDuration*, int64_t) = nullptr;
+  void (*duracion_total)(AWorkDuration*, int64_t) = nullptr;
+  void (*duracion_cpu)(AWorkDuration*, int64_t) = nullptr;
+  void (*duracion_gpu)(AWorkDuration*, int64_t) = nullptr;
+  int (*informar2)(APerformanceHintSession*, AWorkDuration*) = nullptr;
 };
 
 template <typename F>
@@ -101,6 +115,12 @@ Funciones CargarFunciones() {
   Cargar(biblioteca, "AThermal_acquireManager", f.termico);
   Cargar(biblioteca, "AThermal_getCurrentThermalStatus", f.estado);
   Cargar(biblioteca, "AThermal_getThermalHeadroom", f.margen);
+  Cargar(biblioteca, "AWorkDuration_create", f.duracion_crear);
+  Cargar(biblioteca, "AWorkDuration_setWorkPeriodStartTimestampNanos", f.duracion_inicio);
+  Cargar(biblioteca, "AWorkDuration_setActualTotalDurationNanos", f.duracion_total);
+  Cargar(biblioteca, "AWorkDuration_setActualCpuDurationNanos", f.duracion_cpu);
+  Cargar(biblioteca, "AWorkDuration_setActualGpuDurationNanos", f.duracion_gpu);
+  Cargar(biblioteca, "APerformanceHint_reportActualWorkDuration2", f.informar2);
   return f;  // libandroid.so stays loaded: the process already has it
 }
 
@@ -135,10 +155,16 @@ struct Ritmo {
   int64_t objetivo_ns = 0;
   std::vector<Hilo> hilos;
   std::vector<int64_t> antes, ahora;
+  // The GPU part (API 35): one AWorkDuration reused every frame, and the renderer's running GPU total.
+  AWorkDuration* duracion = nullptr;
+  uint64_t gpu_previo_ns = 0;
+  int64_t inicio_ns = 0;
   // For the periodic line.
   int64_t desde_ns = 0;
   uint64_t fotogramas = 0, informes = 0, fallos = 0;
   int64_t suma_trabajo = 0, max_trabajo = 0, ns_informando = 0, por_encima = 0;
+  int64_t suma_gpu = 0, max_gpu = 0, gpu_por_encima = 0;
+  uint64_t con_gpu = 0;
 };
 Ritmo g_ritmo;
 
@@ -216,6 +242,16 @@ void Iniciar(Ritmo& r) {
               double(r.objetivo_ns) / 1e6, fps > 0 ? fps : 60,
               r.f.ritmo_preferido ? r.f.ritmo_preferido(r.gestor) / 1000 : -1,
               r.f.poner_hilos ? "" : " (Android 13: la sesion se rehace al llegar un hilo)");
+  const bool con_gpu = r.f.duracion_crear && r.f.duracion_inicio && r.f.duracion_total && r.f.duracion_cpu &&
+                       r.f.duracion_gpu && r.f.informar2;
+  if (REXCVAR_GET(nfsmw_android_adpf_gpu) && con_gpu) {
+    r.duracion = r.f.duracion_crear();
+  }
+  REXLOG_INFO("[ritmo] ADPF: tiempo de GPU en el informe: {}",
+              r.duracion                              ? "si (Android 15+)"
+              : !REXCVAR_GET(nfsmw_android_adpf_gpu) ? "no (nfsmw_android_adpf_gpu)"
+              : con_gpu                               ? "no (el sistema no da AWorkDuration)"
+                                                      : "no (Android 14 o anterior)");
   r.activo = true;
   r.desde_ns = AhoraNs();
 }
@@ -271,8 +307,10 @@ extern "C" void nfsmw_android_ritmo_hilo(const char* papel) {
   g_hilos_cambiados.store(true, std::memory_order_release);
 }
 
-// One game frame, from the ring thread at its Swap.
-extern "C" void nfsmw_android_ritmo_fotograma() {
+// One game frame, from the ring thread at its Swap. gpu_total_ns is the renderer's running total of GPU time (0
+// when it has no timestamps); its growth since the last frame is this frame's GPU part. The total is read when the
+// GPU's results come back, a frame or two late, which over a steady stretch of frames is the same amount.
+extern "C" void nfsmw_android_ritmo_fotograma(uint64_t gpu_total_ns) {
   Ritmo& r = g_ritmo;
   if (!r.iniciado) {
     nfsmw_android_ritmo_hilo("anillo");
@@ -296,7 +334,28 @@ extern "C" void nfsmw_android_ritmo_fotograma() {
     return;
   }
   const int64_t antes_informe = AhoraNs();
-  const int resultado = r.f.informar(r.sesion, trabajo);
+  int64_t gpu = 0;
+  if (gpu_total_ns >= r.gpu_previo_ns && r.gpu_previo_ns != 0) {
+    // A long stall (loading) would read as one huge frame: cap it at four budgets.
+    gpu = std::min<int64_t>(int64_t(gpu_total_ns - r.gpu_previo_ns), 4 * r.objetivo_ns);
+  }
+  r.gpu_previo_ns = gpu_total_ns;
+  int resultado;
+  if (r.duracion && gpu > 0) {
+    // Total: the longer of the two parts, which overlap (the GPU draws one frame while the CPU prepares the next).
+    r.f.duracion_inicio(r.duracion, r.inicio_ns ? r.inicio_ns : antes_informe - std::max(trabajo, gpu));
+    r.f.duracion_total(r.duracion, std::max(trabajo, gpu));
+    r.f.duracion_cpu(r.duracion, trabajo);
+    r.f.duracion_gpu(r.duracion, gpu);
+    resultado = r.f.informar2(r.sesion, r.duracion);
+    ++r.con_gpu;
+    r.suma_gpu += gpu;
+    r.max_gpu = std::max(r.max_gpu, gpu);
+    r.gpu_por_encima += gpu > r.objetivo_ns;
+  } else {
+    resultado = r.f.informar(r.sesion, trabajo);
+  }
+  r.inicio_ns = antes_informe;
   const int64_t ahora = AhoraNs();
   r.ns_informando += ahora - antes_informe;
   ++r.fotogramas;
@@ -311,8 +370,15 @@ extern "C" void nfsmw_android_ritmo_fotograma() {
                 r.fotogramas, double(r.suma_trabajo) / double(r.fotogramas) / 1e6, double(r.max_trabajo) / 1e6,
                 double(r.objetivo_ns) / 1e6, r.por_encima, r.informes, r.fallos,
                 double(r.ns_informando) / double(r.fotogramas) / 1e3);
+    if (r.con_gpu) {
+      REXLOG_INFO("[ritmo] ADPF, ultimos 30 s: {} informes con GPU, {:.2f} ms de GPU de media y {:.2f} de maximo "
+                  "({} por encima del objetivo)",
+                  r.con_gpu, double(r.suma_gpu) / double(r.con_gpu) / 1e6, double(r.max_gpu) / 1e6, r.gpu_por_encima);
+    }
     r.desde_ns = ahora;
     r.fotogramas = r.informes = r.fallos = 0;
     r.suma_trabajo = r.max_trabajo = r.ns_informando = r.por_encima = 0;
+    r.suma_gpu = r.max_gpu = r.gpu_por_encima = 0;
+    r.con_gpu = 0;
   }
 }

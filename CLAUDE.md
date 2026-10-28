@@ -314,6 +314,15 @@ scene 7.9-9.1, copies 4.3, gaps between jobs 3.9-4.1, shadows 3.5-4.4, blur 3.4-
   Never above 552 MHz in either race, even at 90-93 % load; GPU 52-54 C, thermal status 0 then 1. So the clock does
   not follow the load: either a cap at 552 MHz (Samsung's game service or power profile) or the governor's step-up
   threshold is above the ~93 % the game reaches. Next: the owner's Samsung performance setting, then sample again.
+- The owner chose **steady 45 FPS and a cooler tablet** over chasing 60 (Gaming Hub is disabled on the tablet; its
+  service `com.samsung.android.game.gos` still runs). `android: the GPU's time in the ADPF report`: Android 15+'s
+  `APerformanceHint_reportActualWorkDuration2` with the renderer's GPU time per frame (cvar
+  `nfsmw_android_adpf_gpu`, on). Race at the 45 limit (`out/tablet/sesion9.log`, `reloj_gpu2.txt`): reports
+  accepted (0 rejected, 47-74 us each), GPU 19.2-20.1 ms per frame against 22.22 (80-258 of ~1300 frames over it
+  per 30 s), 42-44.6 FPS; the clock barely moved (mean 478 → 495 MHz, 552 MHz 39 → 48 % of samples, 650 MHz 2 %),
+  and the previous race was at the 60 limit, so this is no clean A/B. GPU per frame: scene 9.5-11.3 ms, copies 3.0,
+  gaps between jobs 2.8-3.4, blur 1.9, scene without depth 1.7-1.8, shadows 1.4-1.6, small targets 1.1. For a
+  steady 45, the copies (3 ms) and the gaps are the next work.
 
 1. **Confirm the two changes above on the tablet**: the core log line, keyboard play and remapping, controller and
    keyboard connected mid-race. Build and install the `.dev` APK, then run

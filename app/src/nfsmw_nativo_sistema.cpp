@@ -2074,7 +2074,14 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
         Presentar();
         AnotarJuegoPorDelante();  // Measurement only
 #if REX_PLATFORM_ANDROID
-        nfsmw_android_ritmo_fotograma();  // ADPF: this frame's work (android_ritmo.cpp)
+        {
+          // ADPF: this frame's work (android_ritmo.cpp), with the renderer's running GPU time.
+          uint64_t gpu_ns = 0, gpu_trabajos = 0;
+          if (destinos_) {
+            destinos_->TiempoGpu(gpu_ns, gpu_trabajos);
+          }
+          nfsmw_android_ritmo_fotograma(gpu_ns);
+        }
 #endif
         break;
       }
