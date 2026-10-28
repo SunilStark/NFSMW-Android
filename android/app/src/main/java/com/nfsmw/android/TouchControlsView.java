@@ -31,7 +31,7 @@ public final class TouchControlsView extends View {
     static final int START = 0x0010, BACK = 0x0020, LTHUMB = 0x0040, RTHUMB = 0x0080;
     static final int LB = 0x0100, RB = 0x0200, A = 0x1000, B = 0x2000, X = 0x4000, Y = 0x8000;
 
-    private static final int BUTTON = 0, STICK = 1, DPAD = 2, PEDAL = 3, MENU = 4;
+    private static final int BUTTON = 0, STICK = 1, DPAD = 2, PEDAL = 3, MENU = 4, HIDE = 5;
     private static final int TRIGGER_NONE = 0, TRIGGER_LEFT = 1, TRIGGER_RIGHT = 2;
     private static final String PREFS = "nfsmw_controls";
 
@@ -108,6 +108,8 @@ public final class TouchControlsView extends View {
     // State.
     private boolean editing;
     private boolean hiddenByGamepad;
+    /** The player hid the pad with its HIDE button (kept across sessions); only that button stays, as SHOW. */
+    private boolean hiddenByUser;
     private Control selected;
     private float dragDX, dragDY;
     private float pinchStart, sizeAtPinch;
@@ -152,6 +154,8 @@ public final class TouchControlsView extends View {
         add(new Control("back", BUTTON, "BACK", "", BACK, TRIGGER_NONE, grey, .37f, .08f, .10f, true));
         add(new Control("menu", MENU, "⚙", "", 0, TRIGGER_NONE, grey, .50f, .08f, .09f, true));
         add(new Control("start", BUTTON, "START", "", START, TRIGGER_NONE, grey, .63f, .08f, .10f, true));
+        // Hides the rest of the pad without a controller or keyboard; it stays, as SHOW, to bring it back.
+        add(new Control("hide", HIDE, "HIDE", "", 0, TRIGGER_NONE, grey, .24f, .08f, .08f, true));
         // Off by default: the camera stick and the stick clicks.
         add(new Control("rs", STICK, "", "CAMERA", 0, TRIGGER_NONE, grey, .55f, .72f, .30f, false));
         add(new Control("l3", BUTTON, "L3", "", LTHUMB, TRIGGER_NONE, grey, .28f, .88f, .11f, false));
@@ -169,6 +173,7 @@ public final class TouchControlsView extends View {
         tiltSensitivity = prefs.getFloat("tilt_sensitivity", tiltSensitivity);
         hideWithGamepad = prefs.getBoolean("hide_with_gamepad", hideWithGamepad);
         stretch = prefs.getBoolean("stretch", stretch);
+        hiddenByUser = prefs.getBoolean("hidden_by_user", false);
         String json = prefs.getString("layout", null);
         if (json == null) {
             return;
@@ -181,7 +186,8 @@ public final class TouchControlsView extends View {
                     c.x = clamp((float) o.optDouble("x", c.defX), 0f, 1f);
                     c.y = clamp((float) o.optDouble("y", c.defY), 0f, 1f);
                     c.size = clamp((float) o.optDouble("s", c.defSize), .06f, .8f);
-                    c.visible = o.optBoolean("v", c.defVisible);
+                    // The gear and HIDE cannot be hidden: without them the pad could not be brought back.
+                    c.visible = o.optBoolean("v", c.defVisible) || c.type == MENU || c.type == HIDE;
                 }
             }
         } catch (JSONException ignored) {
@@ -254,7 +260,7 @@ public final class TouchControlsView extends View {
     }
 
     void toggleSelectedVisible() {
-        if (selected != null && selected.type != MENU) {
+        if (selected != null && selected.type != MENU && selected.type != HIDE) {
             selected.visible = !selected.visible;
             invalidate();
         }
@@ -309,6 +315,14 @@ public final class TouchControlsView extends View {
         }
         final int liftedIndex = (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP)
                 ? event.getActionIndex() : -1;
+        // HIDE (SHOW while hidden) acts when the finger lifts on it, as the gear does.
+        if (liftedIndex >= 0 && hitAny(event.getX(liftedIndex), event.getY(liftedIndex)) == hideControl()) {
+            setHiddenByUser(!hiddenByUser);
+            return true;
+        }
+        if (hiddenByUser) {
+            return true;  // only SHOW answers
+        }
         final int buttonsBefore = buttonState();
 
         // Sticks hold on to the finger that grabbed them.
@@ -424,6 +438,24 @@ public final class TouchControlsView extends View {
         return false;
     }
 
+    private Control hideControl() {
+        for (Control c : controls) {
+            if (c.type == HIDE) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private void setHiddenByUser(boolean hidden) {
+        hiddenByUser = hidden;
+        releaseAll();
+        prefs.edit().putBoolean("hidden_by_user", hidden).apply();
+        if (haptics) {
+            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+        }
+    }
+
     private Control menuControl() {
         for (Control c : controls) {
             if (c.type == MENU) {
@@ -514,7 +546,7 @@ public final class TouchControlsView extends View {
 
     /** Sends the pad to the game if it changed, and redraws. */
     private void send() {
-        boolean active = !editing && !hiddenByGamepad;
+        boolean active = !editing && !hiddenByGamepad && !hiddenByUser;
         int buttons = active ? buttonState() : 0;
         int lx = 0, ly = 0, rx = 0, ry = 0, lt = 0, rt = 0;
         boolean steeringHeld = false;
@@ -570,6 +602,13 @@ public final class TouchControlsView extends View {
         }
         if (editing) {
             canvas.drawColor(0x66000000);
+        }
+        if (hiddenByUser && !editing) {
+            Control show = hideControl();
+            if (show != null) {
+                drawControl(canvas, show, opacity * .5f);
+            }
+            return;
         }
         for (Control c : controls) {
             if (!c.visible && !editing) {
@@ -659,10 +698,11 @@ public final class TouchControlsView extends View {
                 stroke.setColor(withAlpha(c.pressed ? 0xFFFFD18A : c.color == 0xFF2A3440 ? 0xFFEAF2FA : c.color,
                         a * 230 / 255));
                 canvas.drawCircle(cx, cy, r - stroke.getStrokeWidth() * .5f, stroke);
-                boolean shortLabel = c.label.length() <= 2;
-                float main = shortLabel ? r * (c.label.length() == 1 ? .85f : .6f) : r * .42f;
+                String name = c.type == HIDE && hiddenByUser && !editing ? "SHOW" : c.label;
+                boolean shortLabel = name.length() <= 2;
+                float main = shortLabel ? r * (name.length() == 1 ? .85f : .6f) : r * .42f;
                 if (c.hint.isEmpty()) {
-                    label(canvas, c.label, cx, cy + main * .36f, main, a);
+                    label(canvas, name, cx, cy + main * .36f, main, a);
                 } else {
                     label(canvas, c.label, cx, cy + main * .12f, main, a);
                     label(canvas, c.hint, cx, cy + r * .62f, r * .26f, a);
