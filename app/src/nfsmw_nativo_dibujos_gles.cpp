@@ -1328,7 +1328,7 @@ class DibujosGlesImpl final : public DibujosGles {
         // nfsmw_reflejo_visibilidad: this draw samples the road reflection (from the fetch constant, on every
         // draw: the per-register cache below would only see the first one).
         if (medir_visibilidad_ && (fetch[0] & 0x3) == uint32_t(xenos::FetchConstantType::kTexture) &&
-            ((fetch[1] & 0xFFFFF000u) & 0x1FFFFFFFu) == nfsmw::reflejo_demanda::kDireccion) {
+            ((fetch[1] & 0xFFFFF000u) & 0x1FFFFFFFu) == nfsmw::reflejo_demanda::Direccion()) {
           lee_reflejo = true;
         }
         TexturaDeRegistro& t = por_registro[sampler.registro];

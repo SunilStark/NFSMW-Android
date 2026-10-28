@@ -16,13 +16,19 @@
 
 namespace nfsmw::reflejo_demanda {
 
-// Guest physical address where the game resolves the reflection. It is the same in every measured run
-// (PC and console); nfsmw_recortes_carrera.cpp checks it in every run before skipping any frame.
+// Guest physical address where the game resolves the reflection. 0x07C5A000 in every run measured on the PC and
+// the console; but EDRAM addresses move with the internal resolution, and on the tablet at 1280x720 it was
+// 0x07647000: the guard saw no copy there and the reflection was drawn in every frame, read or not (5 ms of GPU
+// per frame on Mali). So the first copy of the reflection's size (640x360, or 512x288 at the small modes) takes
+// the address over while kDireccion has never been resolved. nfsmw_recortes_carrera.cpp still checks it in
+// every run before skipping any frame.
 constexpr uint32_t kDireccion = 0x07C5A000;
+uint32_t Direccion();
 
 // From the native renderer (ring thread).
 void AnotarLectura();  // a draw samples the reflection texture
-void AnotarCopia();    // the reflection is resolved to kDireccion
+// A copy (resolve) to base of ancho x alto; it counts as the reflection if base is Direccion(), and may set it.
+void AnotarCopiaDestino(uint32_t base, uint32_t ancho, uint32_t alto);
 void AnotarSwap();     // end of a renderer frame
 
 // nfsmw_reflejo_visibilidad. All from the ring thread.

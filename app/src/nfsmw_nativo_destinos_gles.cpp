@@ -617,7 +617,7 @@ class DestinosGles final : public DestinosNativos, public ContextoDestinosGles {
     }
     // nfsmw_reflejo_bajo_demanda: the road reflection is read. The draws look it up at least once per frame
     // (their per-register cache does not last longer than a frame or a C2 copy), which is all it needs.
-    if (direccion == nfsmw::reflejo_demanda::kDireccion) {
+    if (direccion == nfsmw::reflejo_demanda::Direccion()) {
       nfsmw::reflejo_demanda::AnotarLectura();
     }
     return &it->second.imagen;
@@ -892,9 +892,7 @@ class DestinosGles final : public DestinosNativos, public ContextoDestinosGles {
     }
     // nfsmw_reflejo_bajo_demanda. Without this its guard saw no copy of the reflection in its first frames and
     // switched itself off: with GLES the reflection was drawn in every frame.
-    if (base == nfsmw::reflejo_demanda::kDireccion) {
-      nfsmw::reflejo_demanda::AnotarCopia();
-    }
+    nfsmw::reflejo_demanda::AnotarCopiaDestino(base, ancho_imagen, alto_destino);
     Preparar(resuelta->imagen);
     // What the game asks for and what fits in the render target and in the texture.
     const uint32_t pedido_ancho = std::min(uint32_t(x1 - x0), destino_render.ancho - std::min<uint32_t>(x0, destino_render.ancho));

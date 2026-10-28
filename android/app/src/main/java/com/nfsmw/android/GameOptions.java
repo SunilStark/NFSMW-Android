@@ -100,18 +100,24 @@ final class GameOptions {
                     new String[] {"0", SCREEN_ASPECT},
                     new String[] {"16:9 · as on the Xbox 360", "The screen's · no bars, no distortion (prototype)"}),
             new Option(FPS, "FPS limit", "nfsmw_limite_fps", "60",
-                    new String[] {"30", "60", "90", "120"},
-                    new String[] {"30 FPS · saves battery", "60 FPS", "90 FPS · experimental",
-                            "120 FPS · experimental"}),
+                    new String[] {"30", "45", "60", "90", "120"},
+                    new String[] {"30 FPS · saves battery", "45 FPS · even on 90 Hz screens, when 60 does not hold",
+                            "60 FPS", "90 FPS · experimental", "120 FPS · experimental"}),
             new Option("aa", "Antialiasing", "nfsmw_antialiasing", "apagado",
                     new String[] {"apagado", "fxaa"},
                     new String[] {"Off", "FXAA"}),
             new Option("shadows", "Shadows", "nfsmw_sombras_cada", "1",
                     new String[] {"1", "2"},
                     new String[] {"Every frame", "Every 2 frames · more performance"}),
-            new Option("car_reflections", "Car reflections", "nfsmw_cubemap_caras_max", "6",
-                    new String[] {"6", "2", "1"},
-                    new String[] {"High", "Medium", "Low · more performance"}),
+            // Faces of the car's environment map redrawn per race frame (nfsmw_recortes_carrera.cpp). 0 redraws one
+            // face every 30 frames in turn (nfsmw_cubemap_refresco_lento): almost no cost, and the paint's
+            // reflection follows the car slowly (tunnels, night) instead of keeping the race start's; the rear-view
+            // mirror, one of those faces, only updates then too. Off by default in this copy: the owner plays in
+            // the chase camera and wants the GPU time for frame rate.
+            new Option("car_reflections", "Car reflections", "nfsmw_cubemap_caras_max", "0",
+                    new String[] {"6", "2", "1", "0"},
+                    new String[] {"High", "Medium", "Low · more performance",
+                            "Off · slow reflection, most performance (mirror barely updates)"}),
             new Option("road_reflection", "Wet road reflection", "nfsmw_reflejo_carretera", "true",
                     new String[] {"true", "false"},
                     new String[] {"On", "Off · more performance"}),
@@ -186,6 +192,12 @@ final class GameOptions {
                 value = screenAspect(context);
             }
             args.add("--" + o.cvar + "=" + value);
+            // Off means no face redrawn: also the rear-view mirror's, which nfsmw.toml keeps every frame
+            // (nfsmw_cubemap_caras_siempre = 4). In a race on the tablet that face alone was 230 draws and 6.2 ms of
+            // GPU per frame, read by nothing in the chase camera.
+            if (o.key.equals("car_reflections") && "0".equals(value)) {
+                args.add("--nfsmw_cubemap_caras_siempre=0");
+            }
         }
         if ("xenos".equals(get(context, RENDERER))) {
             // Use ordinary descriptor sets and host framebuffers on older drivers.

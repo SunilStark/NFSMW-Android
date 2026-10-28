@@ -218,7 +218,27 @@ void AnotarLectura() {
   g_ultima_lectura.store(g_swaps.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
 }
 
-void AnotarCopia() { g_copias.fetch_add(1, std::memory_order_relaxed); }
+namespace {
+std::atomic<uint32_t> g_direccion{kDireccion};
+std::atomic<bool> g_direccion_vista{false};  // a copy reached the current address
+}  // namespace
+
+uint32_t Direccion() { return g_direccion.load(std::memory_order_relaxed); }
+
+void AnotarCopiaDestino(uint32_t base, uint32_t ancho, uint32_t alto) {
+  uint32_t actual = g_direccion.load(std::memory_order_relaxed);
+  if (base != actual && !g_direccion_vista.load(std::memory_order_relaxed) &&
+      ((ancho == 640 && alto == 360) || (ancho == 512 && alto == 288))) {
+    g_direccion.store(base, std::memory_order_relaxed);
+    REXLOG_INFO("[recortes] reflejo bajo demanda: el reflejo se resuelve en {:08X} ({}x{}), no en {:08X}; se usa esa",
+                base, ancho, alto, actual);
+    actual = base;
+  }
+  if (base == actual) {
+    g_direccion_vista.store(true, std::memory_order_relaxed);
+    g_copias.fetch_add(1, std::memory_order_relaxed);
+  }
+}
 
 void AnotarSwap() { g_swaps.fetch_add(1, std::memory_order_relaxed); }
 
@@ -267,6 +287,21 @@ REXCVAR_DEFINE_INT32(nfsmw_cubemap_caras_max, REX_PLATFORM_SWITCH != 0 ? 1 : -1,
     .range(-1, 6)
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+/*
+ * A still reflection that still follows the car (nfsmw_cubemap_refresco_lento).
+ *
+ * With nfsmw_cubemap_caras_max = 0 (the launcher's Car reflections: Off) the six faces were drawn once, where the
+ * first race of the session started, and never again: starting in a dark spot left the car dark for the whole
+ * race, and the next race kept the last one's surroundings. Now, with 0, one face is redrawn every N race frames,
+ * in turn: the whole reflection is renewed every 6 x N frames (3 s at 60 FPS with 30), for 1/N of one face per
+ * frame on average (a rotating face, with the small objects trimmed). 0 = never again, as before.
+ */
+REXCVAR_DEFINE_INT32(nfsmw_cubemap_refresco_lento, 30, "NFSMW",
+                     "Con nfsmw_cubemap_caras_max = 0: una cara del mapa de entorno del coche se vuelve a dibujar cada N "
+                     "fotogramas de carrera, por turnos, para que el reflejo quieto siga al coche (tuneles, noche). 0 = "
+                     "nunca despues de la primera vez")
+    .range(0, 600)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 // On the Switch it is 4: face 2 (view 20), the rear-view mirror's. Confirmed fixed on the console (mask 4,
 // race at 26-31 FPS). It costs ~+270 draws per frame. It used to be 2: face 1 (view 19), which is not the
 // mirror's.
@@ -417,6 +452,7 @@ std::atomic<bool> g_aviso_vistas_caras{false};
 // Set only once all six faces have been named, not when trying.
 std::atomic<bool> g_aviso_caras_nombradas{false};
 std::atomic<uint32_t> g_rotacion{0};
+std::atomic<uint32_t> g_fotogramas_lento{0};  // nfsmw_cubemap_refresco_lento
 // Faces already drawn at least once in this race. Until all six are, none is trimmed: a delayed
 // reflection is acceptable, a black one is not.
 constexpr uint32_t kTodasLasCaras = (1u << kCaras) - 1u;
@@ -684,6 +720,11 @@ constexpr uint32_t kReflejoMirando = 90;   // frames always drawing it, to check
 enum class FaseReflejo { kMirando, kAplicando, kApagado };
 struct EstadoReflejo {
   FaseReflejo fase = FaseReflejo::kMirando;
+  // Off because no copy reached the address being watched, which was this one. If the renderer learns another
+  // one later (reflejo_demanda::AnotarCopiaDestino), it looks again: on the tablet the first 90 frames went by
+  // before the first copy of the reflection, so it switched off before learning where it really goes.
+  bool apagado_sin_copias = false;
+  uint32_t direccion_apagado = 0;
   uint32_t mirando = 0;
   uint64_t copias_inicio = 0;
   uint32_t desde_dibujo = 0;
@@ -729,13 +770,13 @@ void InformeReflejo(int64_t ahora) {
     e.fase = FaseReflejo::kApagado;
     REXLOG_ERROR("[recortes] reflejo bajo demanda: DIFERENCIA, {} copias a {:08X} con solo {} fotogramas de reflejo "
                  "dibujados; se apaga y el reflejo vuelve a dibujarse siempre",
-                 dc, nfsmw::reflejo_demanda::kDireccion, e.dibujados);
+                 dc, nfsmw::reflejo_demanda::Direccion(), e.dibujados);
   }
   NFSMW_INFORME_DIFERIDO("[recortes] reflejo bajo demanda (build 191), ultimos {:.1f} s: pedido en {} fotogramas, "
                          "dibujado en {} y saltado en {} ({:.0f} %); {} copias y {} lecturas de {:08X}; fase {}",
                          double(ahora - e.desde_ms) / 1000.0, e.pedidos, e.dibujados, e.pedidos - e.dibujados,
                          100.0 * double(e.pedidos - e.dibujados) / double(std::max<uint32_t>(e.pedidos, 1)), dc, dl,
-                         nfsmw::reflejo_demanda::kDireccion, NombreFase(e.fase));
+                         nfsmw::reflejo_demanda::Direccion(), NombreFase(e.fase));
   // What the queries of the draws that sample the reflection reported in this interval.
   if (REXCVAR_GET(nfsmw_reflejo_visibilidad)) {
     const int fase = rd::g_fase_visibilidad.load(std::memory_order_relaxed);
@@ -827,18 +868,27 @@ void DecidirReflejo(uint8_t* base) {
       e.fase = FaseReflejo::kAplicando;
       REXLOG_INFO("[recortes] reflejo bajo demanda: comprobado ({} copias a {:08X} en {} fotogramas con el reflejo "
                   "pedido); desde aqui solo se dibuja si se ha leido en los ultimos {} fotogramas, y si no, 1 de cada {}",
-                  copias, rd::kDireccion, kReflejoMirando, kReflejoGracia,
+                  copias, rd::Direccion(), kReflejoMirando, kReflejoGracia,
                   std::max<int32_t>(1, REXCVAR_GET(nfsmw_reflejo_refresco)));
     } else {
       e.fase = FaseReflejo::kApagado;
+      e.apagado_sin_copias = true;
+      e.direccion_apagado = rd::Direccion();
       REXLOG_WARN("[recortes] reflejo bajo demanda: APAGADO; en {} fotogramas con el reflejo pedido solo hubo {} copias "
                   "a {:08X} (el reflejo no se resuelve ahi): se dibuja siempre",
-                  kReflejoMirando, copias, rd::kDireccion);
+                  kReflejoMirando, copias, rd::Direccion());
     }
     return;
   }
   if (e.fase == FaseReflejo::kApagado) {
     ++e.dibujados;
+    if (e.apagado_sin_copias && rd::Direccion() != e.direccion_apagado) {
+      e.fase = FaseReflejo::kMirando;
+      e.apagado_sin_copias = false;
+      e.mirando = 0;
+      REXLOG_INFO("[recortes] reflejo bajo demanda: ahora se sabe que se resuelve en {:08X}; se vuelve a comprobar",
+                  rd::Direccion());
+    }
     return;
   }
   const uint64_t swaps = rd::g_swaps.load(std::memory_order_relaxed);
@@ -956,6 +1006,14 @@ REX_HOOK_RAW(sub_8243C6E0) {
   if (maximo < 0) {
     return;
   }
+  // nfsmw_cubemap_refresco_lento: with no face per frame, one every N, in turn.
+  int32_t limite = maximo;
+  if (maximo == 0) {
+    const int32_t lento = REXCVAR_GET(nfsmw_cubemap_refresco_lento);
+    if (lento > 0 && g_fotogramas_lento.fetch_add(1, std::memory_order_relaxed) % uint32_t(lento) == 0) {
+      limite = 1;
+    }
+  }
   uint32_t activas[kCaras];
   uint32_t n = 0;
   uint32_t fijas = 0;
@@ -1009,12 +1067,13 @@ REX_HOOK_RAW(sub_8243C6E0) {
     REXLOG_INFO("[recortes] carrera: las seis caras del cubemap ya se han dibujado una vez; "
                 "a partir de aqui manda el limite");
   }
-  if (n <= uint32_t(maximo)) {
+  if (n <= uint32_t(limite)) {
     return;
   }
-  const uint32_t inicio = g_rotacion.fetch_add(1, std::memory_order_relaxed) % n;
+  // The turn only moves on frames that draw a face, so with the slow refresh each face gets its turn in order.
+  const uint32_t inicio = (limite > 0 ? g_rotacion.fetch_add(1, std::memory_order_relaxed) : 0) % n;
   for (uint32_t k = 0; k < n; ++k) {
-    if ((k + n - inicio) % n >= uint32_t(maximo)) {
+    if ((k + n - inicio) % n >= uint32_t(limite)) {
       base[activas[k] + kOffActiva] = 0;
     }
   }
