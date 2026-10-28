@@ -28,8 +28,8 @@ import java.util.zip.ZipOutputStream;
 
 /** Own-app reports only. Generating a report never uploads or sends it. */
 final class Diagnostics {
-    static final String EMAIL = "daniebatuani@gmail.com";
-    static final String ISSUES = "https://github.com/codepdbh/nfsmw-android/issues/new";
+    static final String EMAIL = "tambi.sback@gmail.com";
+    static final String ISSUES = "https://github.com/SunilStark/NFSMW-Android/issues/new";
     private static final int LIMIT = 256 * 1024;
     private static JSONObject cachedGpu;
     private static native String nativeGpuReport(String hooks, String temp, String directory, String library);
