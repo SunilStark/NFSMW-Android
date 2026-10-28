@@ -31,6 +31,7 @@ code generator another way, run them afterwards, in this order.
 | File | What it does |
 |---|---|
 | `android_logcat.sh` | Shows the app's log on the PC (`adb logcat` with the app's tags). |
+| `android/comprobar_tableta.ps1` ("check tablet") | Step 1 of [CLAUDE.md](../CLAUDE.md) on the tablet: device data, the fast-core and argument lines in the log, no game-screen restart on hot-plug, and the owner's answers; summary in `out/tablet/paso1.txt`. |
 | `biblioteca_shaders.mjs`, `biblioteca_shaders_gles.mjs` ("shader library") | Build `nfsmw_shaders.nfsp` (Vulkan) and `nfsmw_shaders_gles.nfsp` on the PC with Node, as the launcher does on the tablet. |
 | `gles_efectos_presentador.cpp` | Converts the presenter's effect shaders to GLSL ES for the OpenGL ES backend; run it again only when those shaders change. |
 

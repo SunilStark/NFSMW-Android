@@ -233,6 +233,8 @@ public final class GameActivity extends SDLActivity
             args.add("--present_safe_area_x=100");
             args.add("--present_safe_area_y=100");
         }
+        // In logcat so a check on the device can see what the launcher passed (tools/android/comprobar_tableta.ps1).
+        Log.i(TAG, "argumentos del juego: " + String.join(" ", args));
         return args.toArray(new String[0]);
     }
 

@@ -91,6 +91,8 @@ The same steps, with more detail, are in `docs/building-android.md`; keep both i
 
 ## Checking a build on the tablet
 
+`tools/android/comprobar_tableta.ps1` runs the checks of step 1 below; these are the pieces it uses.
+
 - Log: `adb logcat -s NFSMW-rex NFSMW` (the game's own log goes to logcat under `NFSMW-rex`; the launcher's
   **Enviar crash o log** makes a ZIP with the native logs too).
 - Fast cores: at start the log lists each core (`[android] nucleos (cpu:reloj/capacidad/parte): ...`) and should then
@@ -134,7 +136,11 @@ Estabilidad gráfica **Automática**. On the tablet: the app's battery use **Unr
 ## Next, in order (each measured on the tablet before and after)
 
 1. **Confirm the two changes above on the tablet**: the core log line, keyboard play and remapping, controller and
-   keyboard connected mid-race.
+   keyboard connected mid-race. Build and install the `.dev` APK, then run
+   `powershell -ExecutionPolicy Bypass -File tools\android\comprobar_tableta.ps1` with the owner at the tablet: it
+   records the device's data (correct "The tablet" above from it), checks the core and argument lines in the log and
+   that the game screen is not recreated on hot-plug, and asks the owner what only a person can see. Its summary,
+   `out/tablet/paso1.txt`, goes into the commit or into "Done in this copy".
 2. **Textures for Mali**: with no BC support, BC1-5 are decoded on the CPU to 16 or 32 bits a texel
    (`app/src/nfsmw_nativo_dibujos.cpp`, the `bc_cpu_` path around `formato_host`). Transcode BC1 to ETC2 RGB8 and
    BC3 to ASTC 4x4 or ETC2 EAC RGBA8 (whichever the tablet's `vkjson` lists) instead, and cache the result on disk.
