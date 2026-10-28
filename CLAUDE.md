@@ -12,6 +12,56 @@ notes and planning docs, and replaced `README.md` and `CHANGELOG.md`. A merge th
 modify/delete or content conflicts: keep this copy's side (`git rm` the deleted ones), and move anything useful from
 upstream's release notes into `CHANGELOG.md` under an "Upstream" line.
 
+## Status at handover (2026-10-28)
+
+Everything after upstream 0.8.2 in this copy (`git log --oneline 5507002^..`) was written in a cloud session that had
+neither the NDK, nor the game, nor the tablet. **No commit of this copy has been built as an APK or run on the
+tablet.** The plan's steps 1 to 5 and the English launcher are done in code; steps 6 to 9 are not started.
+
+What was checked, off-device only:
+
+- The asset-free tests at the end of `docs/building-android.md` pass on Linux: the four Java tests, and
+  `android_nucleos`, `android_termico`, `tamano_pantalla`, `texturas_etc` (also under ASan), `texturas_cache_etc`
+  (also under TSan) and `spirv_precision` (shaders from glslang; spirv-val passes). `build.js` passes `node --check`.
+- Every changed C++ file passes `clang++ -std=c++23 -fsyntax-only` on Linux, with stub headers for the window
+  system and the generated shader headers. `android/app/src/main/cpp/android_ritmo.cpp` was checked the same way
+  with a stub `android/*.h`.
+- The Java sources parse against `android-all` (only SDL, androidx, `R` and `BuildConfig` were missing).
+
+Never compiled, so the first build is where they meet the real toolchain:
+
+- The `REX_PLATFORM_ANDROID` / `__ANDROID__` branches: the ADPF calls in `app/src/nfsmw_espera_fotograma.cpp` and
+  `nfsmw_nativo_sistema.cpp`, the thread pinning in `app/src/nfsmw_texturas_cache_etc.cpp`, and
+  `android_ritmo.cpp` against the NDK's real headers (API 33/34 symbols are loaded with dlsym, minSdk 26).
+- The Java against SDL and the Android SDK (Gradle, R8), and `android/app/src/main/cpp/CMakeLists.txt` and
+  `app/CMakeLists.txt` with the new sources.
+- `tools/tests/texturas_etc_vulkan_test.cpp`, built with the NDK for the tablet.
+
+### First local session, in order
+
+1. One-time setup and the build below, from a fresh clone. Fix what does not compile; the files above are the
+   likely places. Run the asset-free tests on the PC too.
+2. Install the `.dev` APK and do "Next" step 1 with the owner (`tools/android/comprobar_tableta.ps1`); correct
+   "The tablet" from its output.
+3. Then "Next" steps 2 to 5, each measured against its switch turned off. These are on by default in a fresh install:
+   **Textures on GPUs without BC → ETC2**, **Thermal control → Automatic**, **System performance hints (ADPF) → On**,
+   **Game cores → Fast cores only**, **Text language → English**. Off by default: **Color precision** (32 bits), the
+   16:10 sizes (**Internal resolution** stays 1280x720) and **Aspect ratio** (16:9). If the first run crashes or draws
+   wrongly, turn the default-on switches off one at a time to find the change, read the log, and fix that change rather
+   than leaving it off.
+4. Record the results in "Done in this copy" and `CHANGELOG.md`, and say in each commit what ran on the tablet.
+
+### Open points
+
+- Ask the owner: the tablet's RAM (6 or 8 GB) and Android / One UI version; whether the published app is installed
+  with the game in `/sdcard/nsfmw-androidevolved/` (step 2 of the build pulls `default.xex` from there).
+- `Diagnostics.EMAIL` and `Diagnostics.ISSUES` still send crash reports to upstream's author and issue tracker.
+  Ask the owner where this copy's reports should go before anyone uses **Send crash or log**.
+- Still in Spanish: log text (by rule), and the cvar descriptions in the in-game settings overlay. Speech and movies
+  are Spanish on the PAL Spain disc and cannot change.
+- The OpenGL ES backend still decodes BC textures (no ETC2 there), and the HUD is stretched at 16:10, as it is at
+  wide proportions.
+
 ## Rules
 
 - **Nothing from the game is ever committed or pushed**: not `default.xex`, the disc's files, `app/generated/`,
@@ -161,6 +211,10 @@ battery use **Unrestricted**, Game Booster on.
   narrower: the game's projection already shows more above and below (Vert+); the presenters show that front
   buffer at its own proportion. Launcher: the two sizes and **Aspect ratio → The screen's**. Sizes
   tested off-device; not on the tablet.
+- `android: launcher in English; game text in English by default`: every launcher string, edition names and the
+  shader builder's messages; `nfsmw_idioma` defaults to 0 (English). cvar values, preference keys and log text are
+  unchanged, so saved settings carry over (a saved language choice too: set it to English once on an existing
+  install). Java tests pass; not built.
 
 ## Next, in order (each measured on the tablet before and after)
 

@@ -14,15 +14,18 @@ are included, and none are ever committed.
 
 | Change | State |
 |---|---|
-| Game threads kept off the little cores on the Exynos 1380 | Tested on known SoC layouts; not yet on the tablet |
-| Keyboard play and key remapping in the launcher | Compiled and tested off-device; not yet on the tablet |
-| No game-screen restart when a controller or keyboard connects | Compiled; not yet on the tablet |
+| Game threads kept off the little cores on the Exynos 1380 | Tested on known SoC layouts |
+| Keyboard play and key remapping in the launcher; no game-screen restart on hot-plug | Tested off-device |
+| BC textures kept compressed as ETC2/EAC on Mali, with a disk cache (Vulkan) | Tested off-device |
+| Half precision that keeps shadow maps and pow at 32 bits | Tested on compiled shaders off-device |
+| ADPF performance hints and thermal step-down of shadows | Policy tested off-device |
+| 16:10 internal sizes (1056x660, 1280x800) and the screen's own proportion | Sizes tested off-device |
+| Launcher in English; game text in English by default | Java tests pass |
 | `.dev` package that installs beside the published app | Done |
 
-Nothing here has been measured on the tablet yet. [CLAUDE.md](CLAUDE.md) has the plan, in order: confirm the above,
-then Mali-friendly textures (ETC2/ASTC instead of CPU-decoded BC), half precision, ADPF and thermal headroom, 16:10
-output, 45 FPS on the 90 Hz display, game data in the app's own folder, a Cortex-A78 build with PGO, and Mali render
-pass tuning.
+None of it has been built as an APK or run on the tablet yet. [CLAUDE.md](CLAUDE.md) has the status at handover and
+the plan, in order: build and confirm the above on the tablet, then 45 FPS on the 90 Hz display, game data in the
+app's own folder, a Cortex-A78 build with PGO, and Mali render pass tuning.
 
 ## Requirements
 
