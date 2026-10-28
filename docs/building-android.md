@@ -12,7 +12,12 @@ in the repository. The commands are for PowerShell unless a step says Git Bash.
 - **JDK 17 or later**. Android Studio's `jbr` works; `build_android.ps1` finds it.
 - **Python 3.10 or later**, and **Git** with Git Bash (`tools/codegen.sh` is a bash script).
 - For the code generator, which runs on the PC: **LLVM clang 20 or later**, **CMake 3.25 or later** and a single
-  **Ninja**.
+  **Ninja**. The SDK's `cmake;3.30.5` package brings both CMake and a Ninja, so it can serve as the only one.
+- **Visual Studio 2022 Build Tools** with the C++ workload (MSVC and the Windows SDK): clang on Windows compiles
+  against Microsoft's C++ library and the Windows headers. No IDE is needed:
+  `winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`.
+  Load its environment (`vcvars64.bat`) in the shell that runs CMake and the PC tests, then put LLVM's `bin` and the
+  SDK's CMake ahead of Visual Studio's CMake and Ninja on `PATH`.
 - About **16 GB of RAM**. The generated code is about 144 MB of C++, and the ThinLTO link of the game is heavy. If it
   runs out of memory, lower `--thinlto-jobs` in `android/app/src/main/cpp/CMakeLists.txt`.
 - **Your own Need for Speed: Most Wanted for Xbox 360, PAL Spain edition.** `app/` is built for that executable;
@@ -46,10 +51,11 @@ Three traps of CMake on Windows that cost a lot of time:
    `(Get-FileHash assets/game_root/default.xex).Hash` must be
    `AAD15FC218D034DE3131F746E0B763DD8049A40DD676EFC87667FCAF4FC72694` (PAL Spain).
 
-3. **The code generator** (`rexglue`), built for the PC:
+3. **The code generator** (`rexglue`), built for the PC. `-march=x86-64-v2` is what the SDK's `CMakePresets.json`
+   uses; without it, `sdk/src/core/memory.cpp`'s SSSE3 code does not compile:
 
    ```powershell
-   cmake -S sdk -B out/host -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+   cmake -S sdk -B out/host -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-march=x86-64-v2 -DCMAKE_CXX_FLAGS=-march=x86-64-v2
    cmake --build out/host --target rexglue
    Get-ChildItem sdk/out,out/host -Recurse -Filter rexglue.exe   # the SDK sets its own output folder
    ```

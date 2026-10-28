@@ -106,7 +106,9 @@ Install, and check each with `--version` or its path:
 - JDK 17 or later (Android Studio's `jbr` works; `build_android.ps1` finds it).
 - Python 3.10+, Git with Git Bash (for `tools/codegen.sh`), and for the code generator on the PC: LLVM clang 20 or
   later, CMake 3.25+ and **one** Ninja (see the three CMake traps in `docs/building-android.md`: run CMake from
-  PowerShell, and long builds with `Start-Process` and a log file).
+  PowerShell, and long builds with `Start-Process` and a log file). The SDK's `cmake;3.30.5` brings a Ninja: use it.
+- Visual Studio 2022 Build Tools, C++ workload (MSVC + Windows SDK): clang on Windows needs them. Load `vcvars64.bat`
+  in the shell, then put LLVM's `bin` and the SDK's CMake first on `PATH`.
 - About 16 GB of RAM: the generated code is about 144 MB of C++, and the ThinLTO link is heavy. If the link runs out
   of memory, lower `--thinlto-jobs` in `android/app/src/main/cpp/CMakeLists.txt`.
 
@@ -124,8 +126,8 @@ The same steps, with more detail, are in `docs/building-android.md`; keep both i
    `AAD15FC218D034DE3131F746E0B763DD8049A40DD676EFC87667FCAF4FC72694` (PAL Spain), the edition `app/` is built for.
    For another edition, stop and read `docs/ANDROID_EDITIONS.md` with the owner before going on.
 3. **The code generator** for the PC:
-   `cmake -S sdk -B out/host -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++`
-   then `cmake --build out/host --target rexglue`. The executable lands under `sdk/out/` (the SDK sets its output
+   `cmake -S sdk -B out/host -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-march=x86-64-v2 -DCMAKE_CXX_FLAGS=-march=x86-64-v2`
+   (the flags are the SDK presets'; without them the SSSE3 code in `sdk/src/core/memory.cpp` does not compile), then `cmake --build out/host --target rexglue`. The executable lands under `sdk/out/` (the SDK sets its output
    folder): `Get-ChildItem sdk/out,out/host -Recurse -Filter rexglue.exe`.
 4. **Translate the game to C++**, from Git Bash at the repository root:
    `REXGLUE=<path to rexglue.exe> PYTHON=py tools/codegen.sh app`. It writes `app/generated/default` and
