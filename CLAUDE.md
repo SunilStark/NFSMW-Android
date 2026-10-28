@@ -27,7 +27,7 @@ the reflection fixes and 9a (not the same route, so no clean before/after for th
 what is left are under "Next", step 9. The tablet reaches thermal level 1 within a few minutes of play.
 
 Measuring on this PC: record the whole log while the owner plays
-(`cmd /c "adb logcat -v time -s NFSMW-rex:V NFSMW:V >> out	ablet\<name>.log"` in a Terminal panel tab; Git Bash in
+(`cmd /c "adb logcat -v time -s NFSMW-rex:V NFSMW:V >> out\tablet\<name>.log"` in a Terminal panel tab; Git Bash in
 the background worked once and later exited at once, and a PowerShell background job was cut off after a minute),
 then read the C2/C6 reports from it.
 
