@@ -74,6 +74,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <array>
 #include <atomic>
 #include <bit>
@@ -1703,6 +1704,11 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
     const double hz = std::max(1.0, double(float(modo.refresh_rate)));
     const auto intervalo =
         std::chrono::duration_cast<Reloj::duration>(std::chrono::duration<double>(1.0 / hz));
+#if REX_PLATFORM_ANDROID
+    if (nfsmw_android_vsync_iniciar()) {
+      return BucleVblankPanel(hz, intervalo);
+    }
+#endif
     auto siguiente = Reloj::now() + intervalo;
     while (activo_.load(std::memory_order_acquire)) {
       const auto ahora = Reloj::now();
@@ -1720,6 +1726,78 @@ class SistemaGraficoNativo final : public rex::system::IGraphicsSystem {
     }
     return 0;
   }
+
+#if REX_PLATFORM_ANDROID
+  /*
+   * The vblank on the panel's own refresh (android_vsync.cpp): one interrupt every N refreshes, N = the panel's rate
+   * over the game's (45 on 90 Hz: 2; 60 on 60: 1), so each game frame stays on screen the same number of refreshes.
+   * When the panel's rate is not a whole multiple (the tablet moves between 60 and 90 Hz by itself, and 90 over 60
+   * is 1.5), or no callback comes for 100 ms (the app in the background), the timer fires instead, at the full rate,
+   * so the game never gets fewer vblanks than its limit; after a hitch at most 250 ms of them are replayed.
+   */
+  int BucleVblankPanel(double hz, Reloj::duration intervalo) {
+    uint64_t visto = 0;
+    int64_t periodo_ns = 0;
+    uint32_t pendientes = 0;
+    uint32_t cada_anotado = 0;
+    auto disparar = [&] {
+      contador_.fetch_add(1, std::memory_order_relaxed);
+      vblanks_.fetch_add(1, std::memory_order_relaxed);
+      Interrupcion(0, 2);
+    };
+    // The timer's schedule, as BucleVblank's: used while there is no refresh or the panel is not a multiple. It
+    // waits on the refreshes too (they wake it early, it checks its deadline and waits again), so it notices at once
+    // when the panel becomes usable.
+    auto siguiente = Reloj::now() + intervalo;
+    uint32_t cada = 0;
+    while (activo_.load(std::memory_order_acquire)) {
+      int espera_ms = 100;
+      if (cada == 0) {
+        const auto falta = std::chrono::duration_cast<std::chrono::milliseconds>(siguiente - Reloj::now()).count();
+        espera_ms = int(std::clamp<int64_t>(falta, 1, 100));
+      }
+      const int nuevos = nfsmw_android_vsync_esperar(&visto, &periodo_ns, espera_ms);
+      // Only a whole multiple of the limit (within 3 %) is paced by the panel: 90 Hz over a limit of 60 would give
+      // 45 or 90 vblanks, never 60, so then the timer beats as before (cada = 0).
+      const double hz_panel = periodo_ns > 0 ? 1e9 / double(periodo_ns) : 0.0;
+      const double razon = hz_panel / hz;
+      const long entero = std::lround(razon);
+      // No refresh in 100 ms (the app in the background): the timer too.
+      cada = nuevos > 0 && entero >= 1 && std::fabs(razon - double(entero)) < 0.03 * double(entero)
+                 ? uint32_t(entero)
+                 : 0;
+      if (nuevos > 0 && hz_panel > 0.0 && cada != cada_anotado) {
+        if (cada) {
+          REXLOG_INFO("[vblank] panel a {:.1f} Hz: el juego recibe un vblank cada {} refrescos ({:.1f} Hz; limite {:.0f})",
+                      hz_panel, cada, hz_panel / cada, hz);
+        } else {
+          REXLOG_INFO("[vblank] panel a {:.1f} Hz, que no es multiplo del limite ({:.0f}): temporizador", hz_panel, hz);
+        }
+        cada_anotado = cada;
+        pendientes = 0;
+      }
+      if (cada) {
+        const uint32_t tope = std::max<uint32_t>(cada, uint32_t(hz_panel / 4.0));  // 250 ms
+        pendientes = std::min(pendientes + uint32_t(nuevos), tope);
+        while (pendientes >= cada) {
+          pendientes -= cada;
+          disparar();
+        }
+        siguiente = Reloj::now() + intervalo;  // the timer picks up from here if the panel stops serving
+        continue;
+      }
+      const auto ahora = Reloj::now();
+      if (ahora - siguiente > std::chrono::milliseconds(250)) {
+        siguiente = ahora;  // after a long pause, not hundreds of vblanks at once
+      }
+      while (ahora >= siguiente) {
+        disparar();
+        siguiente += intervalo;
+      }
+    }
+    return 0;
+  }
+#endif
 
   int BucleAnillo() {
     /*

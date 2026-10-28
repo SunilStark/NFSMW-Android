@@ -164,14 +164,23 @@ public final class GameActivity extends SDLActivity
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Display display = getWindowManager().getDefaultDisplay();
             Display.Mode best = null;
+            boolean bestEven = false;
             for (Display.Mode mode : display.getSupportedModes()) {
                 if (mode.getPhysicalWidth() != display.getMode().getPhysicalWidth()) {
                     continue;
                 }
-                // The lowest mode that still shows every frame the game makes.
-                if (mode.getRefreshRate() + 0.5f >= fps &&
-                        (best == null || mode.getRefreshRate() < best.getRefreshRate())) {
+                // The lowest mode that still shows every frame the game makes, preferring one that is a whole
+                // multiple of the limit, so every frame stays on screen the same number of refreshes (45 on 90 Hz,
+                // not on 60).
+                float rate = mode.getRefreshRate();
+                if (rate + 0.5f < fps) {
+                    continue;
+                }
+                float ratio = rate / fps;
+                boolean even = Math.abs(ratio - Math.round(ratio)) < 0.02f;
+                if (best == null || (even && !bestEven) || (even == bestEven && rate < best.getRefreshRate())) {
                     best = mode;
+                    bestEven = even;
                 }
             }
             if (best != null) {
